@@ -74,6 +74,7 @@ svg{display:block}
   .side nav a[aria-current="page"]{background:var(--gold-soft)}
   .side nav svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
   .side .foot{margin-top:auto;font-size:12px;color:var(--muted);line-height:1.5}
+  .side .foot .ver{margin-top:10px;padding-top:10px;border-top:1px solid var(--line);font-weight:700;letter-spacing:.06em;color:var(--gold-ink);font-variant-numeric:tabular-nums}
   .main{padding-left:36px;padding-right:max(36px,env(safe-area-inset-right,0px));padding-block:22px 48px}
   .tabbar{display:none}
   .top .brand{display:none}
@@ -377,7 +378,7 @@ body{font-size:14px;line-height:1.45}
   <aside class="side">
     <div class="brandwrap"><div class="brand" id="brandSide"></div><button class="icon rn" type="button" data-act="rename" aria-label="Rename tracker" title="Rename tracker"></button></div>
     <nav id="sideNav" aria-label="Sections"></nav>
-    <p class="foot">Every amount is shown in both PHP and USD. Amounts are stored in the currency you enter. Back up your data from the Settings tab.</p>
+    <div class="foot"><p>Every amount is shown in both PHP and USD. Amounts are stored in the currency you enter. Back up your data from the Settings tab.</p><p class="ver" id="verSide"></p></div>
   </aside>
   <main class="main">
     <header class="top">
@@ -525,6 +526,11 @@ const ic=n=>'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="'+IC[n]+'"/></
 const MARK='<svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="gm" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#EBCB73"/><stop offset=".5" stop-color="#D2A63E"/><stop offset="1" stop-color="#A67C1E"/></linearGradient></defs><path d="M16 2l12 14-12 14L4 16z" fill="url(#gm)"/><path d="M16 8l6.5 8-6.5 8-6.5-8z" fill="none" stroke="#2B2416" stroke-opacity=".45" stroke-width="1.2"/></svg>';
 const NAV=[['overview','Overview','Home'],['income','Income & balance','Income'],['expenses','Expenses','Spend'],['savings','Savings & investments','Savings'],['categories','Budgets','Budgets'],['loans','Loans','Loans'],['cards','Credit cards','Cards'],['rates','Currencies','FX'],['data','Settings & backup','Settings']];
 const DEFAULT_TITLE="Mitzikoi's Expense Tracker";
+/* App version: bump on every release (major.minor.patch). */
+const APP_VERSION='4.0.2';
+const APP_DATE='2026-11-23';
+/* Shown as e.g. "V4.0.2 | 2026 Nov 23" */
+const verLabel=()=>{const d=parseD(APP_DATE);return 'V'+APP_VERSION+' | '+d.getFullYear()+' '+d.toLocaleDateString('en-US',{month:'short'})+' '+d.getDate()};
 const ACCT={savings:'Bank savings',checking:'Checking / payroll',timedeposit:'Time deposit',ewallet:'E-wallet',investment:'Investment fund',stocks:'Stocks',crypto:'Crypto',retirement:'Retirement',other:'Other'};
 const ACCTCOL={savings:'#3F8F6B',checking:'#4F7FBF',timedeposit:'#C79A2E',ewallet:'#3C9DA8',investment:'#8A63B8',stocks:'#B5543F',crypto:'#D1782F',retirement:'#8C8F3A',other:'#8a8a8a'};
 
@@ -969,7 +975,8 @@ function viewData(){
   '<section class="panel" style="margin-bottom:12px"><h2>Tracker name</h2><form data-form="title" autocomplete="off"><div class="fld"><label for="f-title-s">Title shown in the app and browser tab</label><input id="f-title-s" name="title" type="text" maxlength="60" required value="'+esc(S.settings.title)+'"></div><div class="acts"><button class="btn gold" type="submit">Save name</button>'+(S.settings.title!==DEFAULT_TITLE?'<button class="btn" type="button" data-act="title-reset">Reset to “'+esc(DEFAULT_TITLE)+'”</button>':'')+'</div></form></section>'+
   '<div class="grid2"><section class="panel"><h2>Download</h2><div class="kv" style="margin-bottom:12px;grid-template-columns:repeat(auto-fit,minmax(90px,1fr))">'+counts.map(k=>'<div class="stat"><small>'+k[0]+'</small><b>'+S[k[1]].length+'</b></div>').join('')+'</div><p class="muted" style="margin-bottom:12px">Last backup: '+esc(lb)+'</p><div class="acts"><button class="btn gold" type="button" data-act="backup">Download backup (.json)</button><button class="btn" type="button" data-act="copy-json">Copy JSON</button><button class="btn" type="button" data-act="export-csv-all">'+ic('download')+'All expenses (.csv)</button></div></section>'+
   '<section class="panel"><h2>Restore</h2><div class="fld"><label for="restore-file">Backup file</label><input id="restore-file" type="file" accept=".json,application/json"></div><div class="fld"><label for="restore-text">Or paste the JSON</label><textarea id="restore-text" spellcheck="false" placeholder="{ &quot;app&quot;: &quot;expense-tracker&quot;, … }"></textarea></div><div class="acts"><button class="btn" type="button" data-act="restore-paste">Check pasted JSON</button></div><div id="restore-prev" style="margin-top:14px"></div></section></div>'+
-  '<section class="panel"><h2>Start fresh</h2><p class="muted" style="margin-bottom:14px">Clears every expense, income entry, savings account, loan, card and purchase. Your categories, budgets and currency list stay. Download a backup first if you want to keep what is here.</p><button class="btn" type="button" data-act="fresh" data-confirm="1">Clear all entries</button></section>';
+  '<section class="panel"><h2>Start fresh</h2><p class="muted" style="margin-bottom:14px">Clears every expense, income entry, savings account, loan, card and purchase. Your categories, budgets and currency list stay. Download a backup first if you want to keep what is here.</p><button class="btn" type="button" data-act="fresh" data-confirm="1">Clear all entries</button></section>'+
+  '<p class="muted" style="text-align:center;font-size:12px;margin-top:14px">'+esc(S.settings.title)+' · '+esc(verLabel())+'</p>';
 }
 const VIEWS={overview:viewOverview,income:viewIncome,savings:viewSavings,expenses:viewExpenses,categories:viewCategories,loans:viewLoans,cards:viewCards,rates:viewRates,data:viewData};
 
@@ -983,6 +990,7 @@ function renderBrand(){
   const t=S.settings.title||DEFAULT_TITLE,html=MARK+'<span>'+esc(t)+'</span>';
   $('#brandTop').innerHTML=html;$('#brandSide').innerHTML=html;
   $$('.icon.rn').forEach(b=>{b.innerHTML=ic('edit')});
+  $('#verSide').textContent=verLabel();
   document.title=t;
   const m=document.querySelector('meta[name="apple-mobile-web-app-title"]');if(m)m.setAttribute('content',t);
 }
@@ -1182,7 +1190,7 @@ function updateConverter(){
 }
 
 /* ---------- backup ---------- */
-function exportJSON(){return JSON.stringify({app:'expense-tracker',version:1,exportedAt:new Date().toISOString(),data:S},null,2)}
+function exportJSON(){return JSON.stringify({app:'mitzikois-expense-tracker',version:APP_VERSION,exportedAt:new Date().toISOString(),data:S},null,2)}
 function showJson(text){
   modal('Copy your backup','<p class="hint" style="margin-top:0">Select all, copy, and paste into a text file saved as .json.</p><div class="fld"><textarea id="json-out" readonly spellcheck="false">'+esc(text)+'</textarea></div><div class="acts"><button class="btn gold" type="button" data-act="select-json">Select all</button><button class="btn" type="button" data-act="close">Close</button></div>');
 }
@@ -1208,15 +1216,32 @@ async function doBackup(){
   if(res==='saved'){S.meta.lastBackup=new Date().toISOString();save();render();toast('Backup saved')}
   else if(res==='declined')toast('Download cancelled');
 }
+const APP_IDS=['expense-tracker','aurum-ledger','mitzikois-expense-tracker'];
+const b64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+async function decryptBackup(enc,pass){
+  if(!(window.crypto&&crypto.subtle))throw new Error('nocrypto');
+  const km=await crypto.subtle.importKey('raw',new TextEncoder().encode(pass),'PBKDF2',false,['deriveKey']);
+  const key=await crypto.subtle.deriveKey({name:'PBKDF2',salt:b64(enc.salt),iterations:enc.iter||310000,hash:'SHA-256'},km,{name:'AES-GCM',length:256},false,['decrypt']);
+  const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64(enc.iv)},key,b64(enc.ct));
+  return new TextDecoder().decode(pt);
+}
 function parseBackup(text){
   let o;
   try{o=JSON.parse(text)}catch(e){return{error:'That is not valid JSON.'}}
-  const d=o&&(o.app==='expense-tracker'||o.app==='aurum-ledger')&&o.data?o.data:o;
+  if(o&&o.encrypted&&o.encrypted.ct&&o.encrypted.salt&&o.encrypted.iv)return{encrypted:o.encrypted,when:o.exportedAt,version:o.version};
+  const d=o&&(APP_IDS.includes(o.app)||o.exportedAt)&&(o.data||o.state)?(o.data||o.state):o;
   if(!d||typeof d!=='object'||!Array.isArray(d.categories)||!Array.isArray(d.expenses))return{error:'This does not look like an Expense Tracker backup.'};
   return{data:normalize(d),when:o.exportedAt};
 }
 function showRestorePreview(res){
   const el=$('#restore-prev');if(!el)return;
+  if(res.encrypted){
+    ui.pendingRestore=null;ui.pendingEnc=res;
+    el.innerHTML='<div class="prev">This backup is password-protected'+(res.version?' (made by version '+esc(res.version)+')':'')+'. Enter the password you set when you made it.</div>'+
+      (res.encrypted.hint?'<p class="hint">Hint: '+esc(res.encrypted.hint)+'</p>':'')+
+      '<div class="fld"><label for="restore-pass">Backup password</label><input id="restore-pass" type="password" autocomplete="current-password"></div><div class="acts"><button class="btn gold" type="button" data-act="restore-unlock">Unlock backup</button></div><p class="conv" id="restore-msg"></p>';
+    return;
+  }
   if(res.error){ui.pendingRestore=null;el.innerHTML='<div class="prev" style="background:transparent;border:1px solid var(--bad);color:var(--bad)">'+esc(res.error)+'</div>';return}
   ui.pendingRestore=res.data;const d=res.data;
   el.innerHTML='<div class="prev">Found '+d.categories.length+' categories, '+d.expenses.length+' expenses, '+d.income.length+' income entries, '+d.accounts.length+' accounts, '+d.loans.length+' loans, '+d.cards.length+' cards, '+d.purchases.length+' purchases'+(res.when?' · exported '+esc(new Date(res.when).toLocaleString()):'')+'.</div><button class="btn gold" type="button" data-act="restore-apply" data-confirm="1">Replace current data</button>';
@@ -1290,6 +1315,18 @@ function handle(a,el){
     }
     case 'select-json':{const t=$('#json-out');if(t){t.focus();t.select()}break}
     case 'restore-paste':showRestorePreview(parseBackup(($('#restore-text')||{}).value||''));break;
+    case 'restore-unlock':{
+      const pe=ui.pendingEnc,pw=($('#restore-pass')||{}).value||'',msg=$('#restore-msg');
+      if(!pe)break;
+      if(!pw){if(msg)msg.textContent='Enter the password.';break}
+      if(msg)msg.textContent='Unlocking…';
+      decryptBackup(pe.encrypted,pw).then(txt=>{
+        const r=parseBackup(txt);
+        if(r.error||r.encrypted){showRestorePreview({error:'Unlocked, but the contents are not a tracker backup.'});return}
+        ui.pendingEnc=null;if(!r.when)r.when=pe.when;showRestorePreview(r);
+      }).catch(e=>{const m=$('#restore-msg');if(m)m.textContent=e&&e.message==='nocrypto'?'This browser cannot decrypt here. Open the tracker over https or as a local file.':'Wrong password, or the file is damaged.'});
+      break;
+    }
     case 'restore-apply':
       if(ui.pendingRestore){S=normalize(ui.pendingRestore);S.meta.sample=false;ui.pendingRestore=null;save();applyTheme();render();toast('Backup restored')}
       break;
