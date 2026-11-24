@@ -316,6 +316,43 @@ body{font-size:14px;line-height:1.45}
   .phead .sub{display:block}
 }
 
+/* ---------- Lock screen ---------- */
+#lock{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:24px max(16px,env(safe-area-inset-right,0px)) 24px max(16px,env(safe-area-inset-left,0px));background:radial-gradient(120% 80% at 50% 0%,var(--gold-soft),var(--bg) 60%);overflow:auto}
+.lockcard{width:100%;max-width:380px;background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:26px 22px;box-shadow:var(--shadow);text-align:center;position:relative;overflow:hidden}
+.lockcard::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--foil)}
+.lockcard .lmark svg{width:46px;height:46px;margin:0 auto 10px}
+.lockcard h1{font:600 26px/1.15 var(--f-display);margin-bottom:4px;overflow-wrap:anywhere}
+.lockcard .fld{text-align:left;margin:18px 0 10px}
+.lockcard .btn{width:100%}
+.lockcard .lmsg{min-height:1.3em;font-size:13px;font-weight:600;color:var(--bad);margin-bottom:8px}
+.lockcard details{margin-top:16px;text-align:left;font-size:13px;color:var(--muted)}
+.lockcard summary{cursor:pointer;font-weight:600;text-align:center}
+.lockcard details p{margin:8px 0 10px}
+.lockcard .ver{margin-top:16px;font-size:11px;letter-spacing:.06em;font-weight:700;color:var(--muted)}
+.pw{position:relative}
+.pw input{padding-right:44px!important}
+.pw button{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:36px;height:36px}
+.palettes{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px}
+.palettes label{cursor:pointer;display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--line);border-radius:12px;font-size:13px;font-weight:600;background:var(--surface)}
+.palettes input{position:absolute;opacity:0;width:1px;height:1px}
+.palettes i{width:22px;height:22px;border-radius:50%;flex:none;border:1px solid rgba(0,0,0,.08)}
+.palettes input:checked+i{outline:2px solid var(--ink);outline-offset:2px}
+.palettes label:has(input:checked){border-color:var(--gold);background:var(--gold-soft)}
+.palettes input:focus-visible+i{outline:2px solid var(--gold);outline-offset:2px}
+.setrow{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--line)}
+.setrow:last-child{border-bottom:0}
+.setrow .lbl{margin:0}
+.setrow p{font-size:12px;color:var(--muted);margin-top:2px}
+.tundo{margin-left:10px;border:0;background:transparent;color:inherit;font-weight:800;text-decoration:underline;cursor:pointer;padding:0}
+#toast{display:flex;align-items:center;justify-content:center;gap:4px}
+#toast[hidden]{display:none}
+.util{height:8px;border-radius:99px;background:var(--surface2);overflow:hidden}
+.util i{display:block;height:100%;border-radius:99px}
+.credit{display:grid;gap:8px;padding:12px 0;border-bottom:1px dashed var(--line)}
+.credit .acts{margin:0}
+kbd{font:600 11px ui-monospace,Menlo,monospace;padding:1px 6px;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;background:var(--surface2)}
+.icon[aria-pressed="true"]{color:var(--gold-ink);border-color:var(--gold);background:var(--gold-soft)}
+
 /* ---------- Tracker title ---------- */
 .brandwrap{display:flex;align-items:center;gap:2px;min-width:0}
 .brand{min-width:0;line-height:1.1}
@@ -386,7 +423,9 @@ body{font-size:14px;line-height:1.45}
       <div class="ctl">
         <button id="fx" class="fxchip" type="button" data-act="refresh-fx"></button>
         <div class="seg" id="disp" role="group" aria-label="Show first"></div>
+        <button id="hideBtn" class="icon" type="button" data-act="hide"></button>
         <button id="themeBtn" class="icon" type="button" data-act="theme"></button>
+        <button id="lockBtn" class="icon" type="button" data-act="lock-now" aria-label="Lock now" title="Lock now" hidden></button>
       </div>
     </header>
     <div id="banner"></div>
@@ -397,6 +436,7 @@ body{font-size:14px;line-height:1.45}
 <button class="fab" type="button" id="fab" data-act="fab" aria-label="Quick add"></button>
 <div id="modal" hidden></div>
 <div id="toast" hidden role="status"></div>
+<div id="lock" hidden></div>
 
 <script>
 (function(){
@@ -470,14 +510,24 @@ const monthName=ym=>{const p=ym.split('-').map(Number);return new Date(p[0],p[1]
 const monthShort=ym=>{const p=ym.split('-').map(Number);return new Date(p[0],p[1]-1,1).toLocaleDateString(undefined,{month:'short'})};
 const fmtDate=s=>parseD(s).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
 const fmtCache={};
+/* Hide amounts: money values show as dots unless ui.noMask is set (forms). */
+const hidden=()=>!!(S&&S.settings.hide&&!ui.noMask);
+const symCache={};
+function curSym(cur){
+  if(symCache[cur])return symCache[cur];
+  let s=cur+' ';
+  try{const p=new Intl.NumberFormat('en-US',{style:'currency',currency:cur}).formatToParts(1).find(x=>x.type==='currency');if(p)s=p.value}catch(e){}
+  return symCache[cur]=s;
+}
 function money(n,cur){
   if(n==null||isNaN(n))return '—';
+  if(hidden())return curSym(cur)+'•••••';
   try{
     const f=fmtCache[cur]||(fmtCache[cur]=new Intl.NumberFormat('en-US',{style:'currency',currency:cur}));
     return f.format(n);
   }catch(e){return cur+' '+Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
 }
-const compact=n=>new Intl.NumberFormat('en',{notation:'compact',maximumFractionDigits:1}).format(n);
+const compact=n=>hidden()?'•••':new Intl.NumberFormat('en',{notation:'compact',maximumFractionDigits:1}).format(n);
 const fmtRate=x=>x>=100?x.toFixed(2):x>=1?x.toFixed(4):x.toFixed(6);
 
 /* ---------- dual currency (PHP + USD side by side) ---------- */
@@ -520,20 +570,37 @@ const IC={
   income:'M12 3v11M7.5 9.5L12 14l4.5-4.5M4 16v4h16v-4',
   savings:'M4 5h16v13H4zM12 8.5a3 3 0 100 6 3 3 0 000-6zM12 11.5h.01M7 18v2M17 18v2',
   download:'M12 4v11M7.5 10.5L12 15l4.5-4.5M5 20h14',
-  chev:'M6 9l6 6 6-6'
+  chev:'M6 9l6 6 6-6',
+  lock:'M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 017 0v3M12 15v2',
+  eye:'M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12zM12 9a3 3 0 100 6 3 3 0 000-6z',
+  eyeoff:'M3 3l18 18M10.6 5.1A10.6 10.6 0 0112 5c6.4 0 10 7 10 7a17.8 17.8 0 01-3.2 4.2M6.6 6.6C3.9 8.4 2 12 2 12s3.6 7 10 7c1.8 0 3.4-.5 4.8-1.3M9.9 9.9a3 3 0 004.2 4.2',
+  palette:'M12 3a9 9 0 100 18c1.1 0 1.6-.8 1.6-1.6 0-1.2-1-1.4-1-2.4 0-.9.7-1.6 1.6-1.6H16a5 5 0 005-5c0-4-4-7.4-9-7.4zM7.5 11.5h.01M10 7.5h.01M15 7.5h.01'
 };
 const ic=n=>'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="'+IC[n]+'"/></svg>';
-const MARK='<svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="gm" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#EBCB73"/><stop offset=".5" stop-color="#D2A63E"/><stop offset="1" stop-color="#A67C1E"/></linearGradient></defs><path d="M16 2l12 14-12 14L4 16z" fill="url(#gm)"/><path d="M16 8l6.5 8-6.5 8-6.5-8z" fill="none" stroke="#2B2416" stroke-opacity=".45" stroke-width="1.2"/></svg>';
+let markN=0;
+const markSvg=()=>{const id='gm'+(++markN);return '<svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="'+id+'" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:var(--f1,#EBCB73)"/><stop offset=".5" style="stop-color:var(--f2,#D2A63E)"/><stop offset="1" style="stop-color:var(--f3,#A67C1E)"/></linearGradient></defs><path d="M16 2l12 14-12 14L4 16z" fill="url(#'+id+')"/><path d="M16 8l6.5 8-6.5 8-6.5-8z" fill="none" stroke="#2B2416" stroke-opacity=".45" stroke-width="1.2"/></svg>'};
 const NAV=[['overview','Overview','Home'],['income','Income & balance','Income'],['expenses','Expenses','Spend'],['savings','Savings & investments','Savings'],['categories','Budgets','Budgets'],['loans','Loans','Loans'],['cards','Credit cards','Cards'],['rates','Currencies','FX'],['data','Settings & backup','Settings']];
 const DEFAULT_TITLE="Mitzikoi's Expense Tracker";
 /* App version: bump on every release (major.minor.patch). */
-const APP_VERSION='4.0.2';
-const APP_DATE='2026-11-23';
+const APP_VERSION='5.0.0';
+const APP_DATE='2026-11-24';
 /* Shown as e.g. "V4.0.2 | 2026 Nov 23" */
 const verLabel=()=>{const d=parseD(APP_DATE);return 'V'+APP_VERSION+' | '+d.getFullYear()+' '+d.toLocaleDateString('en-US',{month:'short'})+' '+d.getDate()};
 const ACCT={savings:'Bank savings',checking:'Checking / payroll',timedeposit:'Time deposit',ewallet:'E-wallet',investment:'Investment fund',stocks:'Stocks',crypto:'Crypto',retirement:'Retirement',other:'Other'};
 const ACCTCOL={savings:'#3F8F6B',checking:'#4F7FBF',timedeposit:'#C79A2E',ewallet:'#3C9DA8',investment:'#8A63B8',stocks:'#B5543F',crypto:'#D1782F',retirement:'#8C8F3A',other:'#8a8a8a'};
 
+const BPER={monthly:{l:'Monthly',per:'month',m:1},quarterly:{l:'Quarterly',per:'quarter',m:3},annual:{l:'Annual',per:'year',m:12}};
+/* Color themes: accent + background tint for light and dark mode.
+   f = foil gradient stops, on = text on the accent. */
+const PALETTES={
+  gold:{n:'Gold',light:{bg:'#FBF8F1',s2:'#F6F0E1',line:'#E7DDC5',a:'#C79A2E',ink:'#8A6414',soft:'#F5EBC9',f:['#EBCB73','#D2A63E','#B08523'],on:'#201808'},dark:{bg:'#100E0A',s:'#1A1710',s2:'#231F14',line:'#3A311D',a:'#DDB850',ink:'#E8C763',soft:'#2E2610',f:['#EBCB73','#D2A63E','#B08523'],on:'#201808'}},
+  rose:{n:'Rose',light:{bg:'#FBF5F5',s2:'#F6E8EA',line:'#EBD3D7',a:'#C0566E',ink:'#9A3550',soft:'#F7E1E6',f:['#EFA3B4','#D06A83','#B04A66'],on:'#2A0C14'},dark:{bg:'#120C0E',s:'#1C1316',s2:'#25191D',line:'#3D2830',a:'#E58AA0',ink:'#F0A6B8',soft:'#34202A',f:['#EFA3B4','#D06A83','#B04A66'],on:'#2A0C14'}},
+  emerald:{n:'Emerald',light:{bg:'#F5F9F6',s2:'#E7F1EA',line:'#D2E3D7',a:'#2F8A5B',ink:'#1E6B43',soft:'#DDF0E4',f:['#7CCB9E','#3FA06D','#2A7D52'],on:'#06200F'},dark:{bg:'#0B110D',s:'#121A15',s2:'#19241D',line:'#26392D',a:'#5CC58C',ink:'#7FD6A6',soft:'#18301F',f:['#7CCB9E','#3FA06D','#2A7D52'],on:'#06200F'}},
+  sapphire:{n:'Sapphire',light:{bg:'#F5F7FB',s2:'#E8EEF7',line:'#D3DDEC',a:'#3B6FC0',ink:'#24529B',soft:'#E0E9F8',f:['#8DB2EC','#5B8CD8','#3A66B3'],on:'#071530'},dark:{bg:'#0B0E14',s:'#121722',s2:'#19202E',line:'#273248',a:'#6E9BE6',ink:'#93B6F0',soft:'#182440',f:['#8DB2EC','#5B8CD8','#3A66B3'],on:'#071530'}},
+  amethyst:{n:'Amethyst',light:{bg:'#F8F6FB',s2:'#EEE8F6',line:'#DDD3EC',a:'#7A55B5',ink:'#5B3A94',soft:'#ECE2F8',f:['#C2A6EC','#9471CF','#7250AD'],on:'#1A0B33'},dark:{bg:'#0F0C14',s:'#17121F',s2:'#1F1829',line:'#33284A',a:'#A88BE0',ink:'#C0A8EE',soft:'#261D3A',f:['#C2A6EC','#9471CF','#7250AD'],on:'#1A0B33'}},
+  terracotta:{n:'Terracotta',light:{bg:'#FBF6F2',s2:'#F5E9E0',line:'#E9D6C8',a:'#C2683A',ink:'#9A4B22',soft:'#F8E4D6',f:['#EFA77E','#D57A4A','#B35D30'],on:'#2A1206'},dark:{bg:'#120D0A',s:'#1C1511',s2:'#261C16',line:'#3E2C22',a:'#E89566',ink:'#F2AE86',soft:'#352217',f:['#EFA77E','#D57A4A','#B35D30'],on:'#2A1206'}},
+  graphite:{n:'Graphite',light:{bg:'#F6F6F5',s2:'#ECECEA',line:'#DADAD6',a:'#4A4F57',ink:'#2E3238',soft:'#E6E7E9',f:['#8E949C','#5B616A','#3D4249'],on:'#FFFFFF'},dark:{bg:'#0E0F10',s:'#16181A',s2:'#1D2023',line:'#2E3236',a:'#A9B0B8',ink:'#C9CED4',soft:'#24282C',f:['#D4D8DD','#A9B0B8','#7E858E'],on:'#111315'}}
+};
 const CATCOLORS=['#C79A2E','#3F8F6B','#4F7FBF','#B5543F','#8A63B8','#D1782F','#3C9DA8','#8C8F3A'];
 const REF={USD:1,PHP:57.63,EUR:0.86,GBP:0.76,JPY:156,SGD:1.3,AUD:1.52,CAD:1.4,CNY:7.1,KRW:1450,INR:88,AED:3.6725,SAR:3.75,HKD:7.78,THB:33,MYR:4.2,IDR:16600,VND:26000,NZD:1.75,CHF:0.8,TWD:31};
 const KEY='aurum-ledger.v1';
@@ -548,7 +615,7 @@ function lsSet(k,v){try{localStorage.setItem(k,v);return true}catch(e){ui.noStor
 /* ---------- state ---------- */
 function defaults(){
   return{v:1,meta:{sample:false,lastBackup:null,updated:null},
-    settings:{theme:'auto',display:'PHP',currencies:['PHP','USD'],balanceDues:true,title:DEFAULT_TITLE},
+    settings:{theme:'auto',palette:'gold',font:'classic',hide:false,autoLock:15,lockHint:'',display:'PHP',currencies:['PHP','USD'],balanceDues:true,title:DEFAULT_TITLE},
     rates:{table:Object.assign({},REF),asOf:'2026-11-20',source:'reference',fetchedAt:null,manual:{}},
     categories:[],expenses:[],loans:[],cards:[],purchases:[],income:[],accounts:[]};
 }
@@ -571,6 +638,14 @@ function normalize(raw){
   o.accounts.forEach(a=>{if(!Array.isArray(a.hist))a.hist=[]});
   o.loans.forEach(l=>{if(!Array.isArray(l.paid))l.paid=[]});
   o.purchases.forEach(p=>{if(!Array.isArray(p.paid))p.paid=[]});
+  o.categories.forEach(c=>{if(!BPER[c.budgetPeriod])c.budgetPeriod='monthly';if(!(c.budget>=0))c.budget=num(c.budget)||0});
+  o.cards.forEach(c=>{c.limit=num(c.limit)>0?num(c.limit):0;if(c.available===''||c.available==null||!isFinite(num(c.available)))c.available=null;else c.available=num(c.available)});
+  if(!PALETTES[o.settings.palette])o.settings.palette='gold';
+  if(o.settings.font!=='modern')o.settings.font='classic';
+  o.settings.hide=!!o.settings.hide;
+  if(!(o.settings.autoLock>=0))o.settings.autoLock=15;
+  if(typeof o.settings.lockHint!=='string')o.settings.lockHint='';
+  ['expenses','income'].forEach(k=>{o[k]=o[k].filter(x=>x&&typeof x.date==='string')});
   return o;
 }
 function initial(){
@@ -578,7 +653,7 @@ function initial(){
   s.meta.sample=true;
   const names=[['Groceries','PHP'],['Gas','PHP'],['Rent','PHP'],['Insurance','USD']];
   const budgets={Groceries:12000,Gas:3500,Rent:22000,Insurance:100};
-  s.categories=names.map((n,i)=>({id:uid(),name:n[0],currency:n[1],color:CATCOLORS[i],budget:budgets[n[0]]||0}));
+  s.categories=names.map((n,i)=>({id:uid(),name:n[0],currency:n[1],color:CATCOLORS[i],budget:budgets[n[0]]||0,budgetPeriod:'monthly'}));
   sampleData(s);
   return s;
 }
@@ -603,7 +678,7 @@ function sampleData(s){
   const loanB={id:uid(),name:'Solar panel loan',lender:'Sample Credit Union',currency:'USD',principal:12000,rate:6,termMonths:36,frequency:'quarterly',firstDue:fmtD(new Date(today.getFullYear(),today.getMonth()-5,5)),paid:[]};
   loanB.paid=markPastPaid(null,amortize(loanB).rows,t);
   s.loans.push(loanA,loanB);
-  const card={id:uid(),name:'Gold Visa',issuer:'Sample Bank',currency:'PHP',dueDay:25};
+  const card={id:uid(),name:'Gold Visa',issuer:'Sample Bank',currency:'PHP',dueDay:25,limit:150000,available:null};
   s.cards.push(card);
   const mk=(desc,amount,cur,months,monthsAgo,day)=>{
     const date=fmtD(new Date(today.getFullYear(),today.getMonth()-monthsAgo,day));
@@ -625,9 +700,48 @@ function sampleData(s){
   acct('Global index fund','Sample Broker','investment','USD',4800,0,10000,4620);
   acct('E-wallet','Sample Wallet','ewallet','PHP',8500,0,0,null);
 }
+/* ---------- encryption (login password + encrypted backups) ----------
+   Format (same as v2.0.1 backups): {enc:1,kdf:'PBKDF2-SHA256',iter,salt,iv,ct}
+   AES-GCM 256, key from PBKDF2-SHA256; salt/iv/ct are base64. */
+const ITER=310000;
+const enc8=t=>new TextEncoder().encode(t);
+const b64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+const toB64=u=>{const a=new Uint8Array(u);let s='';for(let i=0;i<a.length;i+=0x8000)s+=String.fromCharCode.apply(null,a.subarray(i,i+0x8000));return btoa(s)};
+const hasCrypto=()=>!!(window.crypto&&crypto.subtle);
+async function deriveKey(pass,salt,iter){
+  if(!hasCrypto())throw new Error('nocrypto');
+  const km=await crypto.subtle.importKey('raw',enc8(pass),'PBKDF2',false,['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:iter||ITER,hash:'SHA-256'},km,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+}
+async function sealWith(key,salt,iter,text,hint){
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,enc8(text));
+  return{enc:1,kdf:'PBKDF2-SHA256',iter:iter||ITER,salt:toB64(salt),iv:toB64(iv),ct:toB64(ct),hint:hint||''};
+}
+async function openWith(key,blob){
+  const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64(blob.iv)},key,b64(blob.ct));
+  return new TextDecoder().decode(pt);
+}
+async function decryptBackup(blob,pass){return openWith(await deriveKey(pass,b64(blob.salt),blob.iter||ITER),blob)}
+const isBlob=o=>!!(o&&typeof o==='object'&&o.ct&&o.iv&&o.salt);
+
+/* Login lock state, kept only in memory. */
+const LK={key:null,salt:null,iter:ITER,last:null};
+const META_KEY='aurum-ledger.meta';
+function readMeta(){try{return JSON.parse(lsGet(META_KEY)||'{}')||{}}catch(e){return{}}}
+function writeMeta(){
+  if(!S)return;
+  lsSet(META_KEY,JSON.stringify({title:S.settings.title,theme:S.settings.theme,palette:S.settings.palette,font:S.settings.font,hint:LK.key?S.settings.lockHint:'',locked:!!LK.key}));
+}
+let saveQ=Promise.resolve();
 function save(){
+  if(!S)return;
   S.meta.updated=Date.now();
-  lsSet(KEY,JSON.stringify(S));
+  writeMeta();
+  if(!LK.key){lsSet(KEY,JSON.stringify(S));return}
+  const snap=JSON.stringify(S),key=LK.key,salt=LK.salt,iter=LK.iter,hint=S.settings.lockHint;
+  saveQ=saveQ.then(()=>sealWith(key,salt,iter,snap,hint)).then(b=>{LK.last=b;lsSet(KEY,JSON.stringify(b))}).catch(()=>{});
+  return saveQ;
 }
 
 /* ---------- calculators ---------- */
@@ -668,6 +782,36 @@ function debtSum(){
 }
 function avgSpend(n){let s=0;for(let i=1;i<=n;i++){const m=monthBalance(ymAdd(todayStr().slice(0,7),-i));s+=m.out}return s/n}
 const budgetPri=c=>c.budget>0?convert(c.budget,c.currency,PRI(),S.rates):null;
+/* Budget periods: monthly, quarterly or annual */
+function periodMonths(per,ym){
+  const p=ym.split('-').map(Number),y=p[0],m=p[1];
+  if(per==='annual')return Array.from({length:12},(_,i)=>y+'-'+pad(i+1));
+  if(per==='quarterly'){const q=Math.floor((m-1)/3);return[1,2,3].map(k=>y+'-'+pad(q*3+k))}
+  return[ym];
+}
+function periodLabel(per,ym,short){
+  const p=ym.split('-').map(Number);
+  if(per==='annual')return String(p[0]);
+  if(per==='quarterly')return 'Q'+(Math.floor((p[1]-1)/3)+1)+' '+p[0];
+  return short?monthShort(ym):monthName(ym);
+}
+function catPeriodSum(c,ym){
+  const ms=new Set(periodMonths(c.budgetPeriod||'monthly',ym));
+  return sumConv(S.expenses.filter(e=>e.catId===c.id&&ms.has(e.date.slice(0,7))),PRI(),S.rates,e=>e.amount,e=>e.currency).total;
+}
+const monthlyEq=c=>{const b=budgetPri(c);return b?b/BPER[c.budgetPeriod||'monthly'].m:0};
+/* Share of the current period that has passed (0–1), for "on pace" hints */
+function periodElapsed(per,ym){
+  const now=new Date(),ms=periodMonths(per,ym);
+  const start=parseD(ms[0]+'-01'),end=new Date(parseD(ms[ms.length-1]+'-01').getFullYear(),parseD(ms[ms.length-1]+'-01').getMonth()+1,1);
+  if(now<start)return 0;if(now>=end)return 1;
+  return (now-start)/(end-start);
+}
+function budgetInfo(c,ym){
+  const b=budgetPri(c);if(!b)return null;
+  const s=catPeriodSum(c,ym),pct=s/b*100,el=periodElapsed(c.budgetPeriod,ym)*100;
+  return{b,s,pct,left:b-s,over:s>b,ahead:!(s>b)&&pct<100&&el>0&&el<100&&pct>el+10,el,label:periodLabel(c.budgetPeriod,ym,true)};
+}
 function curOptions(sel){
   const list=S.settings.currencies.slice();
   if(sel&&!list.includes(sel))list.push(sel);
@@ -677,9 +821,11 @@ const catOf=id=>S.categories.find(c=>c.id===id)||{name:'Uncategorized',color:'#8
 
 /* ---------- ui bits ---------- */
 let toastT=null;
-function toast(msg){
-  const t=$('#toast');t.textContent=msg;t.hidden=false;
-  clearTimeout(toastT);toastT=setTimeout(()=>{t.hidden=true},3200);
+function toast(msg,undo){
+  const t=$('#toast');
+  t.innerHTML='<span>'+esc(msg)+'</span>'+(undo&&ui.undo?'<button type="button" class="tundo" data-act="undo">Undo</button>':'');
+  t.hidden=false;
+  clearTimeout(toastT);toastT=setTimeout(()=>{t.hidden=true},undo?7000:3200);
 }
 function modal(title,body){
   const m=$('#modal');
@@ -716,15 +862,15 @@ function statD(label,n,cur,cls,note){
 }
 function catBars(ym){
   const p=PRI();
-  const cats=S.categories.map(c=>({c,s:monthSum(ym,c.id).total,b:budgetPri(c)})).filter(x=>x.s>0||x.b).sort((a,b)=>b.s-a.s);
+  const cats=S.categories.map(c=>{const bi=budgetInfo(c,ym);return{c,bi,s:bi?bi.s:monthSum(ym,c.id).total}}).filter(x=>x.s>0||x.bi).sort((a,b)=>(b.bi?b.bi.pct:0)-(a.bi?a.bi.pct:0)||b.s-a.s);
   if(!cats.length)return '<div class="empty"><b>No spending yet this month</b>Add an expense to see the split.</div>';
-  const max=Math.max.apply(null,cats.map(x=>Math.max(x.s,x.b||0)).concat([1]));
+  const max=Math.max.apply(null,cats.map(x=>x.s).concat([1]));
   return '<div class="bars">'+cats.map(x=>{
-    const over=x.b&&x.s>x.b;
-    const w=x.b?Math.min(100,x.s/x.b*100):x.s/max*100;
-    const lbl=x.b?money(x.s,p)+' of '+money(x.b,p):money(x.s,p);
-    return '<div class="bar"><div class="bl"><b>'+esc(x.c.name)+(over?' <span class="chip bad">Over</span>':'')+'</b><span'+(over?' class="neg"':'')+'>'+lbl+'</span></div><div class="track"><i style="width:'+Math.max(2,w).toFixed(1)+'%;background:'+(over?'var(--bad)':x.c.color)+'"></i></div></div>';
-  }).join('')+'</div><p class="muted" style="font-size:12px;margin-top:8px">Bars with a budget show progress against it. Set budgets in the Budgets tab.</p>';
+    const bi=x.bi,over=bi&&bi.over;
+    const w=bi?Math.min(100,bi.pct):x.s/max*100;
+    const lbl=bi?money(x.s,p)+' of '+money(bi.b,p)+(x.c.budgetPeriod!=='monthly'?' · '+esc(bi.label):''):money(x.s,p);
+    return '<div class="bar"><div class="bl"><b>'+esc(x.c.name)+(over?' <span class="chip bad">Over</span>':bi&&bi.ahead?' <span class="chip">Ahead of pace</span>':'')+'</b><span'+(over?' class="neg"':'')+'>'+lbl+'</span></div><div class="track"><i style="width:'+Math.max(2,w).toFixed(1)+'%;background:'+(over?'var(--bad)':x.c.color)+'"></i></div></div>';
+  }).join('')+'</div><p class="muted" style="font-size:12px;margin-top:8px">Budgets are compared with their own period (month, quarter or year).</p>';
 }
 function trendChart(){
   const ym=todayStr().slice(0,7),months=[];for(let i=5;i>=0;i--)months.push(ymAdd(ym,-i));
@@ -735,6 +881,13 @@ function trendChart(){
 }
 function dueRows(list,t){
   return list.map(d=>{const dt=parseD(d.date),late=d.date<t;return '<div class="due'+(late?' late':'')+'"><div class="dt"><b>'+dt.getDate()+'</b><span>'+(late?'Overdue':monthShort(d.date.slice(0,7)))+'</span></div><div class="rmain"><b>'+esc(d.title)+'</b><span>'+esc(d.sub)+'</span></div><div class="ramt">'+dual(d.amt,d.cur)+'</div></div>'}).join('');
+}
+/* Daily average and projected month-end spending (expenses only) */
+function pace(ym,spent){
+  const now=new Date(),day=now.getDate(),dim=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+  if(!(spent>0)||day<3)return '';
+  const proj=spent/day*dim,p=PRI();
+  return '<p class="muted" style="font-size:12px;margin-top:4px">Daily average '+money(spent/day,p)+' · on pace for about '+money(proj,p)+' in expenses by month end</p>';
 }
 function viewOverview(){
   const p=PRI(),ym=todayStr().slice(0,7),pym=ymAdd(ym,-1);
@@ -750,7 +903,7 @@ function viewOverview(){
   const accts=S.accounts.slice().sort((a,b)=>(convert(b.balance,b.currency,p,S.rates)||0)-(convert(a.balance,a.currency,p,S.rates)||0));
   return pageHead('Overview','Your month at a glance, in PHP and USD.','<button class="btn gold hide-sm" type="button" data-act="add-exp">'+ic('plus')+'Expense</button><button class="btn hide-sm" type="button" data-act="add-inc">'+ic('plus')+'Income</button>')+
   '<section class="hero"><div><p class="eyebrow">Balance for '+esc(monthName(ym))+'</p><div class="big'+(mb.bal<0?' neg':'')+'">'+balD.main+'</div><div class="big2">'+balD.sub+'</div>'+
-    '<p class="muted" style="font-size:13px">'+(mb.inc>0?'Savings rate <b class="'+sgn(mb.rate)+'">'+mb.rate.toFixed(0)+'%</b> · ':'<a href="#income" style="text-decoration:underline">Add your monthly earnings</a> · ')+esc(delta)+'</p>'+skipped+'</div>'+
+    '<p class="muted" style="font-size:13px">'+(mb.inc>0?'Savings rate <b class="'+sgn(mb.rate)+'">'+mb.rate.toFixed(0)+'%</b> · ':'<a href="#income" style="text-decoration:underline">Add your monthly earnings</a> · ')+esc(delta)+'</p>'+pace(ym,cur.total)+skipped+'</div>'+
     '<div class="stats">'+statD('Income',mb.inc,p,'pos')+statD('Expenses',mb.exp,p)+(S.settings.balanceDues?statD('Loan & card dues',mb.dues,p):'')+statD('Due in 30 days',due30.total,p)+'</div></section>'+
   '<div class="kpis">'+kpi('Total savings',sav,p)+kpi('Net worth',sav-debt.total,p,sgn(sav-debt.total))+kpi('Loans left',debt.loans,p)+kpi('Card installments',debt.cards,p)+'</div>'+
   '<div class="grid2"><section class="panel"><h2>By category</h2>'+catBars(ym)+'</section>'+
@@ -813,26 +966,34 @@ function viewExpenses(){
   const p=PRI(),list=expFiltered();
   const tot=sumConv(list,p,S.rates,e=>e.amount,e=>e.currency);
   const byCur={};list.forEach(e=>{byCur[e.currency]=(byCur[e.currency]||0)+e.amount});
-  const selCat=ui.expCat!=='all'?S.categories.find(c=>c.id===ui.expCat):null,bud=selCat?budgetPri(selCat):null;
+  const selCat=ui.expCat!=='all'?S.categories.find(c=>c.id===ui.expCat):null,bi=selCat?budgetInfo(selCat,ui.expMonth):null;
   const catOpts='<option value="all">All categories</option>'+S.categories.map(c=>'<option value="'+esc(c.id)+'"'+(ui.expCat===c.id?' selected':'')+'>'+esc(c.name)+'</option>').join('');
   return pageHead('Expenses','Log as many entries as you like under each category.','<button class="btn" type="button" data-act="export-csv" aria-label="Export CSV">'+ic('download')+'<span class="hide-sm">CSV</span></button><button class="btn gold" type="button" data-act="add-exp">'+ic('plus')+'Add expense</button>')+
   '<div class="toolbar"><div class="fld"><label for="f-month">Month</label><input id="f-month" type="month" value="'+esc(ui.expMonth)+'"></div><div class="fld"><label for="f-cat">Category</label><select id="f-cat">'+catOpts+'</select></div><div class="fld"><label for="f-q">Search</label><input id="f-q" type="search" placeholder="Note or category" value="'+esc(ui.expQ)+'"></div></div>'+
   '<section class="panel"><div class="stats" style="margin-bottom:6px">'+statD('Total, '+monthShort(ui.expMonth),tot.total,p,'',list.length+' entr'+(list.length===1?'y':'ies'))+
-  (bud?statD('Budget left',bud-tot.total,p,sgn(bud-tot.total),'of '+money(bud,p)):'')+
+  (bi?statD('Budget left · '+bi.label,bi.left,p,sgn(bi.left),'of '+money(bi.b,p)):'')+
   Object.keys(byCur).map(c=>'<div class="stat"><small>Entered in '+esc(c)+'</small><b>'+money(byCur[c],c)+'</b></div>').join('')+'</div>'+
   (list.length?'<ul class="list">'+list.map(e=>{const c=catOf(e.catId);return '<li class="row"><span class="dot" style="background:'+c.color+'"></span><div class="rmain"><b>'+esc(c.name)+'</b><span>'+esc(fmtDate(e.date))+(e.note?' · '+esc(e.note):'')+'</span></div><div class="ramt">'+dual(e.amount,e.currency)+'</div><div class="ract">'+iconBtn('dup-exp',e.id,'plus','Duplicate as today')+iconBtn('edit-exp',e.id,'edit','Edit expense')+iconBtn('del-exp',e.id,'trash','Delete expense',true)+'</div></li>'}).join('')+'</ul>':'<div class="empty"><b>No expenses found</b>'+(ui.expQ?'Try a different search.':'Add one to start tracking.')+'</div>')+
   '</section>';
 }
 function viewCategories(){
   const p=PRI(),ym=todayStr().slice(0,7);
-  const tb=S.categories.reduce((s,c)=>s+(budgetPri(c)||0),0),ts=monthSum(ym).total;
-  return pageHead('Budgets & categories','Each category has a default currency and an optional monthly budget.','<button class="btn gold" type="button" data-act="add-cat">'+ic('plus')+'Add category</button>')+
-  (tb>0?'<section class="panel" style="margin-bottom:12px"><div class="stats">'+statD('Total monthly budget',tb,p)+statD('Spent in '+monthShort(ym),ts,p)+statD('Left',tb-ts,p,sgn(tb-ts))+'</div><div class="prog" style="margin-top:10px"><i style="width:'+Math.min(100,ts/tb*100).toFixed(1)+'%'+(ts>tb?';background:var(--bad)':'')+'"></i></div></section>':'')+
+  const groups=Object.keys(BPER).map(k=>{
+    const cs=S.categories.filter(c=>(c.budgetPeriod||'monthly')===k&&budgetPri(c));
+    if(!cs.length)return '';
+    const b=cs.reduce((s,c)=>s+budgetPri(c),0),sp=cs.reduce((s,c)=>s+catPeriodSum(c,ym),0);
+    return '<div><div class="stats">'+statD(BPER[k].l+' · '+periodLabel(k,ym,true),sp,p,sp>b?'neg':'','of '+money(b,p)+' · '+cs.length+' categor'+(cs.length===1?'y':'ies'))+statD('Left',b-sp,p,sgn(b-sp))+'</div><div class="prog" style="margin:6px 0 4px"><i style="width:'+Math.min(100,sp/b*100).toFixed(1)+'%'+(sp>b?';background:var(--bad)':'')+'"></i></div></div>';
+  }).filter(Boolean);
+  const eq=S.categories.reduce((s,c)=>s+monthlyEq(c),0);
+  return pageHead('Budgets & categories','Set each budget per month, quarter or year.','<button class="btn gold" type="button" data-act="add-cat">'+ic('plus')+'Add category</button>')+
+  (groups.length?'<section class="panel" style="margin-bottom:12px"><div class="stack" style="gap:14px">'+groups.join('')+'</div><p class="muted" style="font-size:12px;margin-top:8px">All budgets together ≈ '+money(eq,p)+' per month.</p></section>':'')+
   (S.categories.length?'<div class="grid">'+S.categories.map(c=>{
-    const n=S.expenses.filter(e=>e.catId===c.id).length,m=monthSum(ym,c.id).total,b=budgetPri(c),over=b&&m>b;
-    return '<article class="card"><div class="ch"><div style="display:flex;gap:10px;align-items:center;min-width:0"><span class="dot" style="background:'+c.color+'"></span><h3>'+esc(c.name)+'</h3></div><div class="ract">'+iconBtn('edit-cat',c.id,'edit','Edit category')+iconBtn('del-cat',c.id,'trash','Delete category',true)+'</div></div>'+
-    '<div class="stats">'+statD('This month',m,p,over?'neg':'')+(b?statD('Budget',c.budget,c.currency):'<div class="stat"><small>Budget</small><b class="muted">None</b></div>')+'<div class="stat"><small>Currency · entries</small><b>'+esc(c.currency)+' · '+n+'</b></div></div>'+
-    (b?'<div><div class="prog"><i style="width:'+Math.min(100,m/b*100).toFixed(1)+'%'+(over?';background:var(--bad)':'')+'"></i></div><p class="muted" style="font-size:12px;margin-top:4px">'+(over?'<span class="neg">Over by '+money(m-b,p)+'</span>':money(b-m,p)+' left · '+(m/b*100).toFixed(0)+'% used')+'</p></div>':'')+'</article>';
+    const n=S.expenses.filter(e=>e.catId===c.id).length,bi=budgetInfo(c,ym),m=monthSum(ym,c.id).total,per=c.budgetPeriod||'monthly';
+    const head='<div class="ch"><div style="min-width:0"><div style="display:flex;gap:10px;align-items:center"><span class="dot" style="background:'+c.color+'"></span><h3>'+esc(c.name)+'</h3></div><div class="tags">'+(bi?'<span class="chip gold">'+BPER[per].l+'</span>':'')+'<span class="chip">'+esc(c.currency)+' · '+n+' entr'+(n===1?'y':'ies')+'</span></div></div><div class="ract">'+iconBtn('edit-cat',c.id,'edit','Edit category')+iconBtn('del-cat',c.id,'trash','Delete category',true)+'</div></div>';
+    if(!bi)return '<article class="card">'+head+'<div class="stats">'+statD('This month',m,p)+'<div class="stat"><small>Budget</small><b class="muted">None</b><span><button class="btn sm" type="button" data-act="edit-cat" data-id="'+esc(c.id)+'" style="margin-top:4px">Set budget</button></span></div></div></article>';
+    return '<article class="card">'+head+
+    '<div class="stats">'+statD('Spent · '+bi.label,bi.s,p,bi.over?'neg':'')+statD('Budget per '+BPER[per].per,c.budget,c.currency)+(per!=='monthly'?statD('This month',m,p):'')+'</div>'+
+    '<div><div class="prog"><i style="width:'+Math.min(100,bi.pct).toFixed(1)+'%'+(bi.over?';background:var(--bad)':'')+'"></i></div><p class="muted" style="font-size:12px;margin-top:4px">'+(bi.over?'<span class="neg">Over by '+money(-bi.left,p)+'</span>':money(bi.left,p)+' left · '+bi.pct.toFixed(0)+'% used')+(per!=='monthly'?' · '+bi.el.toFixed(0)+'% of the '+BPER[per].per+' gone':'')+(bi.ahead?' · <span class="neg">spending ahead of pace</span>':'')+'</p></div></article>';
   }).join('')+'</div>':'<div class="panel empty"><b>No categories yet</b>Create Groceries, Gas, Rent or anything else you track.</div>');
 }
 function schedTable(kind,id,calc,cur){
@@ -854,7 +1015,7 @@ function viewLoans(){
   }).join('')+'</div>':'<div class="panel empty"><b>No loans yet</b>Add one to see its payment, balance and full amortization schedule.</div>');
 }
 /* ---- Credit card installments: grouped by card, by month or by status ---- */
-const money0=(n,cur)=>{try{return new Intl.NumberFormat('en-US',{style:'currency',currency:cur,maximumFractionDigits:0}).format(n)}catch(e){return money(n,cur)}};
+const money0=(n,cur)=>{if(hidden())return curSym(cur)+'•••';try{return new Intl.NumberFormat('en-US',{style:'currency',currency:cur,maximumFractionDigits:0}).format(n)}catch(e){return money(n,cur)}};
 const chev='<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="'+IC.chev+'"/></svg>';
 const STATUS_RANK={overdue:0,active:1,settled:2};
 function purInfos(){
@@ -886,6 +1047,31 @@ function purRow(x,showCard){
       schedTable('pur',p.id,c,p.currency)+'</div>':'')+
   '</div>';
 }
+/* Credit limit and available balance (in the card's billing currency).
+   Available = the figure you entered from your bank, or else limit minus installments left. */
+function cardCredit(card){
+  const lim=card.limit>0?card.limit:0;
+  const owed=sumConv(S.purchases.filter(p=>p.cardId===card.id),card.currency,S.rates,p=>purchaseCalc(p).left,p=>p.currency).total;
+  const manual=card.available!=null&&isFinite(card.available);
+  const avail=manual?card.available:(lim?Math.max(0,lim-owed):null);
+  const used=lim&&avail!=null?Math.max(0,lim-avail):null;
+  return{lim,avail,used,owed,manual,util:lim&&used!=null?Math.min(100,used/lim*100):null};
+}
+const utilColor=u=>u>=70?'var(--bad)':u>=30?'var(--gold)':'var(--good)';
+function creditBlock(card){
+  const k=cardCredit(card),cur=card.currency;
+  if(!k.lim&&!k.manual)return '<div class="credit"><p class="muted" style="font-size:13px">No credit limit set. <button class="btn sm" type="button" data-act="edit-card" data-id="'+esc(card.id)+'" style="margin-left:6px">Add limit</button></p></div>';
+  return '<div class="credit"><div class="stats">'+(k.lim?statD('Credit limit',k.lim,cur):'')+statD('Available',k.avail,cur,k.util>=90?'neg':'pos',k.manual?'As of '+esc(fmtDate(card.availDate||todayStr())):'Estimated')+(k.used!=null?statD('Used',k.used,cur,'',k.util.toFixed(0)+'% of limit'):'')+'</div>'+
+    (k.util!=null?'<div class="util" role="progressbar" aria-label="Credit used" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+k.util.toFixed(0)+'"><i style="width:'+Math.max(1,k.util).toFixed(1)+'%;background:'+utilColor(k.util)+'"></i></div>':'')+
+    '<div class="acts" style="justify-content:space-between;align-items:center"><span class="muted" style="font-size:12px">'+(k.util>=70?'<span class="neg">High utilization</span> · ':'')+(k.manual?'Entered from your bank':'Limit minus installments left')+'</span><button class="btn sm" type="button" data-act="upd-avail" data-id="'+esc(card.id)+'">'+ic('refresh')+'Update available</button></div></div>';
+}
+function availForm(c){
+  ui.noMask=true;const k=cardCredit(c);ui.noMask=false;
+  modal('Available balance','<form data-form="avail" data-id="'+esc(c.id)+'" autocomplete="off"><p class="muted" style="margin-bottom:10px">'+esc(c.name)+(k.lim?' · limit '+esc(money(k.lim,c.currency).replace(/•+/,'•••')):'')+'</p>'+
+    '<div class="fld"><label for="f-av">Available balance ('+esc(c.currency)+')</label><input id="f-av" name="available" data-amt type="number" step="any" min="0" inputmode="decimal" placeholder="As shown in your banking app" value="'+(c.available!=null?esc(c.available):'')+'"><input type="hidden" data-cur value="'+esc(c.currency)+'"></div><p class="conv"></p>'+
+    '<p class="hint">Leave empty to estimate it as the limit minus installments left.</p><div class="acts"><button class="btn gold" type="submit">Save</button><button class="btn" type="button" data-act="close">Cancel</button></div></form>');
+  updateConv();
+}
 function cardFoot(card){
   return '<div class="gfoot"><div class="tags" style="display:flex;gap:6px;flex-wrap:wrap"><span class="chip gold">'+esc(card.currency)+'</span><span class="chip">Due day '+card.dueDay+'</span>'+(card.issuer?'<span class="chip">'+esc(card.issuer)+'</span>':'')+'</div>'+
     '<div class="acts"><button class="btn sm" type="button" data-act="add-pur-card" data-id="'+esc(card.id)+'">'+ic('plus')+'Purchase</button>'+iconBtn('edit-card',card.id,'edit','Edit card')+iconBtn('del-card',card.id,'trash','Delete card and its purchases',true)+'</div></div>';
@@ -896,8 +1082,9 @@ function cardsByCard(xs,open,disp){
     const mine=open.filter(x=>x.p.cardId===card.id);
     const rem=sumConv(mine,disp,S.rates,x=>x.c.left,x=>x.p.currency).total;
     const nd=mine.map(x=>x.c.next.date).sort()[0];
-    const meta=mine.length+' active plan'+(mine.length===1?'':'s')+(nd?' · next '+esc(fmtDate(nd)):'');
-    const body=(mine.length?mine.map(x=>purRow(x,false)).join(''):'<p class="muted" style="padding:12px 0">'+(ui.cardQ?'No matching purchases.':'No active installments on this card.')+'</p>')+cardFoot(card);
+    const k=cardCredit(card);
+    const meta=mine.length+' active plan'+(mine.length===1?'':'s')+(nd?' · next '+esc(fmtDate(nd)):'')+(k.avail!=null?' · '+money(k.avail,card.currency)+' available':'');
+    const body=creditBlock(card)+(mine.length?mine.map(x=>purRow(x,false)).join(''):'<p class="muted" style="padding:12px 0">'+(ui.cardQ?'No matching purchases.':'No active installments on this card.')+'</p>')+cardFoot(card);
     return grp('card:'+card.id,esc(card.name),meta,body,dual(rem,disp));
   });
   const settled=xs.filter(x=>x.status==='settled');
@@ -932,6 +1119,13 @@ function cardsByMonth(open,disp,t){
         return '<div class="due inst'+(late?' late':'')+'"><div class="dt"><b>'+dt.getDate()+'</b><span>'+(late?'Overdue':esc(monthShort(i.r.date.slice(0,7))))+'</span></div><div class="rmain"><b>'+esc(p.desc)+'</b><span>'+(p.months>1?'Installment '+i.r.i+' of '+i.x.c.a.n:'Paid in full')+'</span></div><div class="ramt">'+dual(i.r.pay,p.currency)+'</div><input type="checkbox" data-paid="pur:'+esc(p.id)+':'+i.r.i+'" aria-label="Mark '+esc(p.desc)+' installment '+i.r.i+' paid" title="Mark paid"></div>'}).join('')+'</div>';
     }).join('')+'<p class="muted" style="font-size:12px;margin-top:8px">Tick an installment to mark it paid.</p></section>';
 }
+function availKpi(disp){
+  const cards=ui.cardSel==='all'?S.cards:S.cards.filter(c=>c.id===ui.cardSel);
+  const ks=cards.map(c=>({c,k:cardCredit(c)})).filter(x=>x.k.avail!=null);
+  if(!ks.length)return '<div class="kpi"><small>Available credit</small><b class="muted">—</b><span>Add a credit limit to a card</span></div>';
+  const av=sumConv(ks,disp,S.rates,x=>x.k.avail,x=>x.c.currency).total,lim=sumConv(ks.filter(x=>x.k.lim),disp,S.rates,x=>x.k.lim,x=>x.c.currency).total;
+  return kpi('Available credit',av,disp,'pos',lim?'of '+money0(lim,disp)+' limit':'');
+}
 function viewCards(){
   const disp=PRI(),t=todayStr(),ym=t.slice(0,7);
   const head=pageHead('Credit cards','Installment plans grouped by card, payment month or status.','<button class="btn" type="button" data-act="add-card">'+ic('plus')+'<span><span class="hide-sm">Add </span>Card</span></button><button class="btn gold" type="button" data-act="add-pur">'+ic('plus')+'<span><span class="hide-sm">Add </span>Purchase</span></button>');
@@ -944,7 +1138,7 @@ function viewCards(){
   const nd=open.map(x=>x.c.next.date).sort()[0],overdueN=open.filter(x=>x.status==='overdue').length;
   const kp=(l,b,s,cls)=>'<div class="kpi"><small>'+l+'</small><b class="'+(cls||'')+'">'+b+'</b><span>'+s+'</span></div>';
   const kpis='<div class="kpis">'+kpi('Installments left',left,disp)+kpi('Due this month',dueNow,disp,overdueN?'neg':'',overdueN?overdueN+' overdue':'')+
-    kp('Next payment',nd?esc(fmtDate(nd)):'None',nd&&nd<t?'<span class="neg">Overdue</span>':'&nbsp;',nd&&nd<t?'neg':'')+kp('Active plans',String(open.length),xs.length-open.length+' settled')+'</div>';
+    kp('Next payment',nd?esc(fmtDate(nd)):'None',nd&&nd<t?'<span class="neg">Overdue</span>':open.length+' active plan'+(open.length===1?'':'s'),nd&&nd<t?'neg':'')+availKpi(disp)+'</div>';
   const activeCount=id=>S.purchases.filter(p=>(id==='all'||p.cardId===id)&&purchaseCalc(p).next).length;
   const cardChips='<div class="chips" role="group" aria-label="Filter by card"><button type="button" data-act="csel" data-id="all" aria-pressed="'+(ui.cardSel==='all')+'">All cards <small>'+activeCount('all')+'</small></button>'+
     S.cards.map(c=>'<button type="button" data-act="csel" data-id="'+esc(c.id)+'" aria-pressed="'+(ui.cardSel===c.id)+'">'+esc(c.name)+' <small>'+activeCount(c.id)+'</small></button>').join('')+'</div>';
@@ -971,12 +1165,40 @@ function viewRates(){
 function viewData(){
   const lb=S.meta.lastBackup?new Date(S.meta.lastBackup).toLocaleString():'Never';
   const counts=[['Categories','categories'],['Expenses','expenses'],['Income','income'],['Accounts','accounts'],['Loans','loans'],['Cards','cards'],['Purchases','purchases']];
-  return pageHead('Settings & backup','Name your tracker, and keep a copy of your data as one JSON file.')+
-  '<section class="panel" style="margin-bottom:12px"><h2>Tracker name</h2><form data-form="title" autocomplete="off"><div class="fld"><label for="f-title-s">Title shown in the app and browser tab</label><input id="f-title-s" name="title" type="text" maxlength="60" required value="'+esc(S.settings.title)+'"></div><div class="acts"><button class="btn gold" type="submit">Save name</button>'+(S.settings.title!==DEFAULT_TITLE?'<button class="btn" type="button" data-act="title-reset">Reset to “'+esc(DEFAULT_TITLE)+'”</button>':'')+'</div></form></section>'+
-  '<div class="grid2"><section class="panel"><h2>Download</h2><div class="kv" style="margin-bottom:12px;grid-template-columns:repeat(auto-fit,minmax(90px,1fr))">'+counts.map(k=>'<div class="stat"><small>'+k[0]+'</small><b>'+S[k[1]].length+'</b></div>').join('')+'</div><p class="muted" style="margin-bottom:12px">Last backup: '+esc(lb)+'</p><div class="acts"><button class="btn gold" type="button" data-act="backup">Download backup (.json)</button><button class="btn" type="button" data-act="copy-json">Copy JSON</button><button class="btn" type="button" data-act="export-csv-all">'+ic('download')+'All expenses (.csv)</button></div></section>'+
-  '<section class="panel"><h2>Restore</h2><div class="fld"><label for="restore-file">Backup file</label><input id="restore-file" type="file" accept=".json,application/json"></div><div class="fld"><label for="restore-text">Or paste the JSON</label><textarea id="restore-text" spellcheck="false" placeholder="{ &quot;app&quot;: &quot;expense-tracker&quot;, … }"></textarea></div><div class="acts"><button class="btn" type="button" data-act="restore-paste">Check pasted JSON</button></div><div id="restore-prev" style="margin-top:14px"></div></section></div>'+
-  '<section class="panel"><h2>Start fresh</h2><p class="muted" style="margin-bottom:14px">Clears every expense, income entry, savings account, loan, card and purchase. Your categories, budgets and currency list stay. Download a backup first if you want to keep what is here.</p><button class="btn" type="button" data-act="fresh" data-confirm="1">Clear all entries</button></section>'+
-  '<p class="muted" style="text-align:center;font-size:12px;margin-top:14px">'+esc(S.settings.title)+' · '+esc(verLabel())+'</p>';
+  const st=S.settings,locked=!!LK.key;
+  const modeSeg='<div class="seg" role="group" aria-label="Light or dark">'+[['auto','Auto'],['light','Light'],['dark','Dark']].map(m=>'<button type="button" data-act="set-mode" data-id="'+m[0]+'" aria-pressed="'+(st.theme===m[0])+'">'+m[1]+'</button>').join('')+'</div>';
+  const fontSeg='<div class="seg" role="group" aria-label="Heading font">'+[['classic','Classic serif'],['modern','Modern sans']].map(m=>'<button type="button" data-act="set-font" data-id="'+m[0]+'" aria-pressed="'+(st.font===m[0])+'">'+m[1]+'</button>').join('')+'</div>';
+  const pal='<div class="palettes" role="radiogroup" aria-label="Color theme">'+Object.keys(PALETTES).map(k=>{const P=PALETTES[k].light;return '<label><input type="radio" name="palette" value="'+k+'"'+(st.palette===k?' checked':'')+'><i style="background:linear-gradient(135deg,'+P.f[0]+','+P.f[1]+' 50%,'+P.f[2]+')"></i>'+esc(PALETTES[k].n)+'</label>'}).join('')+'</div>';
+  const autoOpts=[[0,'Never'],[1,'1 minute'],[5,'5 minutes'],[15,'15 minutes'],[30,'30 minutes'],[60,'1 hour']].map(o=>'<option value="'+o[0]+'"'+(st.autoLock===o[0]?' selected':'')+'>'+o[1]+'</option>').join('');
+  const security=locked?
+    '<p class="muted" style="margin-bottom:10px">'+ic('lock').replace('<svg','<svg style="display:inline;width:14px;height:14px;vertical-align:-2px"')+' Password lock is <b style="color:var(--good)">on</b>. Your data is encrypted on this device and the tracker asks for your password when it opens.</p>'+
+    '<div class="setrow"><div><span class="lbl">Lock automatically after</span><p>Locks when you stop using it.</p></div><select class="in" id="f-autolock" style="width:auto">'+autoOpts+'</select></div>'+
+    '<div class="acts" style="margin-top:10px"><button class="btn gold" type="button" data-act="lock-now">'+ic('lock')+'Lock now</button><button class="btn" type="button" data-act="pw-change">Change password</button><button class="btn" type="button" data-act="pw-remove">Turn off password</button></div>'
+   :'<p class="muted" style="margin-bottom:10px">Protect the tracker with a password. Your data is encrypted on this device, and you sign in each time it opens.</p><div class="acts"><button class="btn gold" type="button" data-act="pw-set">'+ic('lock')+'Set a password</button></div>';
+  return pageHead('Settings & backup','Name and style your tracker, protect it with a password, and keep backups.')+
+  '<div class="grid2"><section class="panel"><h2>Tracker name</h2><form data-form="title" autocomplete="off"><div class="fld"><label for="f-title-s">Title shown in the app and browser tab</label><input id="f-title-s" name="title" type="text" maxlength="60" required value="'+esc(st.title)+'"></div><div class="acts"><button class="btn gold" type="submit">Save name</button>'+(st.title!==DEFAULT_TITLE?'<button class="btn" type="button" data-act="title-reset">Reset to “'+esc(DEFAULT_TITLE)+'”</button>':'')+'</div></form></section>'+
+  '<section class="panel"><h2>Login & privacy</h2>'+security+
+    '<div class="setrow" style="margin-top:8px;border-top:1px solid var(--line)"><div><span class="lbl">Hide amounts</span><p>Shows ₱••••• instead of numbers. Toggle anytime with the eye button or <kbd>H</kbd>.</p></div><button class="btn sm'+(st.hide?' gold':'')+'" type="button" data-act="hide" aria-pressed="'+st.hide+'">'+ic(st.hide?'eyeoff':'eye')+(st.hide?'Hidden':'Visible')+'</button></div></section></div>'+
+  '<section class="panel" style="margin-bottom:12px"><h2>Colors & theme</h2><div class="setrow"><span class="lbl">Mode</span>'+modeSeg+'</div><div class="setrow" style="display:block"><span class="lbl" style="display:block;margin-bottom:8px">Color theme</span>'+pal+'</div><div class="setrow"><span class="lbl">Headings</span>'+fontSeg+'</div></section>'+
+  '<div class="grid2"><section class="panel"><h2>Download a backup</h2><div class="kv" style="margin-bottom:12px;grid-template-columns:repeat(auto-fit,minmax(90px,1fr))">'+counts.map(k=>'<div class="stat"><small>'+k[0]+'</small><b>'+S[k[1]].length+'</b></div>').join('')+'</div><p class="muted" style="margin-bottom:12px">Last backup: '+esc(lb)+'</p>'+
+    '<div class="acts"><button class="btn gold" type="button" data-act="backup-enc">'+ic('lock')+'Encrypted backup</button><button class="btn" type="button" data-act="backup">Plain backup (.json)</button><button class="btn" type="button" data-act="copy-json">Copy JSON</button><button class="btn" type="button" data-act="export-csv-all">'+ic('download')+'Expenses (.csv)</button></div>'+
+    '<p class="hint" style="margin:10px 0 0">An encrypted backup needs its password to restore. A plain backup can be opened by anyone who has the file.</p></section>'+
+  '<section class="panel"><h2>Restore</h2><div class="fld"><label for="restore-file">Backup file</label><input id="restore-file" type="file" accept=".json,application/json,text/plain"></div><div class="fld"><label for="restore-text">Or paste the JSON</label><textarea id="restore-text" spellcheck="false" placeholder="{ &quot;app&quot;: &quot;mitzikois-expense-tracker&quot;, … }"></textarea></div><div class="acts"><button class="btn" type="button" data-act="restore-paste">Check pasted JSON</button></div><div id="restore-prev" style="margin-top:14px"></div><p class="hint" style="margin:10px 0 0">Works with plain and encrypted backups from this and earlier versions (including 2.0.1).</p></section></div>'+
+  '<div class="grid2"><section class="panel"><h2>Keyboard shortcuts</h2><div class="kv" style="font-size:13px"><span><kbd>N</kbd> New expense</span><span><kbd>I</kbd> New income</span><span><kbd>H</kbd> Hide/show amounts</span><span><kbd>L</kbd> Lock now</span><span><kbd>/</kbd> Search</span><span><kbd>Esc</kbd> Close</span></div></section>'+
+  '<section class="panel"><h2>Start fresh</h2><p class="muted" style="margin-bottom:14px">Clears every expense, income entry, savings account, loan, card and purchase. Categories, budgets, currencies and your password stay.</p><button class="btn" type="button" data-act="fresh" data-confirm="1">Clear all entries</button></section></div>'+
+  '<p class="muted" style="text-align:center;font-size:12px;margin-top:14px">'+esc(st.title)+' · '+esc(verLabel())+'</p>';
+}
+function pwForm(kind){
+  const T={set:'Set a password',change:'Change password',remove:'Turn off password',enc:'Encrypted backup'}[kind];
+  let body='<form data-form="pw" data-kind="'+kind+'" autocomplete="off">';
+  if(kind==='enc')body+='<p class="hint" style="margin-top:0">Choose a password for this backup file. You will need it to restore. '+(LK.key?'You can use your login password.':'')+'</p>';
+  if(kind==='set')body+='<p class="hint" style="margin-top:0">Your data will be encrypted with this password. <b>If you forget it, the data on this device cannot be recovered</b> — keep a backup.</p>';
+  if(kind==='change'||kind==='remove')body+=pwField('pw-cur','Current password');
+  if(kind!=='remove')body+=pwField('pw-new',kind==='change'?'New password':'Password','new-password')+pwField('pw-new2','Type it again','new-password')+
+    '<div class="fld"><label for="pw-hint">Hint (optional)</label><input id="pw-hint" name="hint" type="text" maxlength="60" placeholder="Shown on the '+(kind==='enc'?'restore':'login')+' screen" value="'+(kind==='enc'?'':esc(S.settings.lockHint||''))+'"></div>';
+  if(kind==='remove')body+='<p class="hint">Your data will be stored unencrypted on this device and the tracker will open without a password.</p>';
+  body+='<p class="conv" id="pw-msg" style="color:var(--bad)"></p><div class="acts"><button class="btn gold" type="submit">'+(kind==='enc'?'Download':kind==='remove'?'Turn off':'Save')+'</button><button class="btn" type="button" data-act="close">Cancel</button></div></form>';
+  modal(T,body);
 }
 const VIEWS={overview:viewOverview,income:viewIncome,savings:viewSavings,expenses:viewExpenses,categories:viewCategories,loans:viewLoans,cards:viewCards,rates:viewRates,data:viewData};
 
@@ -987,8 +1209,8 @@ function renderNav(){
   $('#tabbar').innerHTML=NAV.map(n=>link(n,true)).join('');
 }
 function renderBrand(){
-  const t=S.settings.title||DEFAULT_TITLE,html=MARK+'<span>'+esc(t)+'</span>';
-  $('#brandTop').innerHTML=html;$('#brandSide').innerHTML=html;
+  const t=S.settings.title||DEFAULT_TITLE,lbl='<span>'+esc(t)+'</span>';
+  $('#brandTop').innerHTML=markSvg()+lbl;$('#brandSide').innerHTML=markSvg()+lbl;
   $$('.icon.rn').forEach(b=>{b.innerHTML=ic('edit')});
   $('#verSide').textContent=verLabel();
   document.title=t;
@@ -1001,6 +1223,10 @@ function renderTop(){
   $('#disp').innerHTML=['PHP','USD'].map(c=>'<button type="button" data-act="pri" data-id="'+c+'" aria-pressed="'+(PRI()===c)+'" title="Show '+c+' first">'+c+'</button>').join('');
   $('#fab').innerHTML=ic('plus');
   $('#fab').hidden=ui.view==='rates'||ui.view==='data';
+  const hb=$('#hideBtn'),hid=S.settings.hide;
+  hb.innerHTML=ic(hid?'eyeoff':'eye');hb.setAttribute('aria-pressed',String(hid));
+  hb.setAttribute('aria-label',hid?'Show amounts':'Hide amounts');hb.title=(hid?'Show amounts':'Hide amounts')+' (H)';
+  const lb=$('#lockBtn');lb.hidden=!LK.key;lb.innerHTML=ic('lock');
   const th=S.settings.theme;
   const b=$('#themeBtn');
   b.innerHTML=ic(th==='light'?'sun':th==='dark'?'moon':'auto');
@@ -1018,18 +1244,36 @@ function renderBanner(){
   const has=S.expenses.length+S.loans.length+S.purchases.length>0;
   const lb=S.meta.lastBackup?(Date.now()-new Date(S.meta.lastBackup).getTime())/864e5:null;
   if(!S.meta.sample&&has&&(lb==null||lb>7))out.push('<div class="banner"><span>Your data lives in this browser only. '+(lb==null?'You have not downloaded a backup yet.':'Your last backup is '+Math.floor(lb)+' days old.')+'</span><div class="acts"><button class="btn sm gold" type="button" data-act="backup">Download backup</button></div></div>');
+  if(ui.view==='overview'||ui.view==='categories'){
+    const ym=todayStr().slice(0,7),al=[];
+    S.categories.forEach(c=>{const bi=budgetInfo(c,ym);if(bi&&(bi.over||(bi.pct>=90&&bi.el<=60)))al.push(bi.over?esc(c.name)+' is over its '+esc(bi.label)+' budget by '+money(bi.s-bi.b,PRI()):esc(c.name)+' has used '+bi.pct.toFixed(0)+'% of its '+esc(bi.label)+' budget')});
+    if(al.length)out.push('<div class="banner" style="border-color:var(--bad);color:var(--bad);background:transparent"><span><b>Budget alert:</b> '+al.slice(0,3).join('; ')+(al.length>3?'; and '+(al.length-3)+' more':'')+'.</span>'+(ui.view!=='categories'?'<div class="acts"><a class="btn sm" href="#categories">See budgets</a></div>':'')+'</div>');
+  }
   if(ui.noStore)out.push('<div class="banner"><span>Browser storage is blocked here, so changes last only until you close this page. Download a backup to keep them.</span></div>');
   $('#banner').innerHTML=out.join('');
 }
 function render(){
+  if(!S)return;
   renderBrand();renderNav();renderTop();renderBanner();
   $('#view').innerHTML=VIEWS[ui.view]();
   if(ui.view==='rates')updateConverter();
 }
-function applyTheme(){
-  const r=document.documentElement,t=S.settings.theme;
+/* Mode (auto/light/dark) + color palette + heading font. Works before unlock from the plain meta record. */
+const darkMQ=matchMedia('(prefers-color-scheme: dark)');
+function applyTheme(st){
+  st=st||(S&&S.settings)||{};
+  const r=document.documentElement,t=st.theme||'auto';
   if(t==='auto')r.removeAttribute('data-theme');else r.setAttribute('data-theme',t);
+  const dark=t==='dark'||(t==='auto'&&darkMQ.matches);
+  const P=(PALETTES[st.palette]||PALETTES.gold)[dark?'dark':'light'];
+  const set=(k,v)=>r.style.setProperty(k,v);
+  set('--bg',P.bg);set('--surface2',P.s2);set('--line',P.line);set('--gold',P.a);set('--gold-ink',P.ink);set('--gold-soft',P.soft);set('--on-gold',P.on);
+  set('--foil','linear-gradient(135deg,'+P.f[0]+' 0%,'+P.f[1]+' 48%,'+P.f[2]+' 100%)');set('--f1',P.f[0]);set('--f2',P.f[1]);set('--f3',P.f[2]);
+  if(P.s)set('--surface',P.s);else r.style.removeProperty('--surface');
+  if(st.font==='modern'){set('--f-display',"'Manrope',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif")}else r.style.removeProperty('--f-display');
+  const m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content',P.bg);
 }
+darkMQ.addEventListener&&darkMQ.addEventListener('change',()=>applyTheme(S?S.settings:readMeta()));
 function route(){
   const h=(location.hash||'').slice(1);
   ui.view=NAV.some(n=>n[0]===h)?h:'overview';
@@ -1051,7 +1295,8 @@ function expenseForm(e){
   updateConv();
 }
 /* Live PHP/USD equivalent under any amount field */
-function updateConv(){
+function updateConv(){ui.noMask=true;try{updateConv0()}finally{ui.noMask=false}}
+function updateConv0(){
   const f=$('#modal form');if(!f)return;
   const el=$('.conv',f),a=$('[data-amt]',f),c=$('[data-cur]',f);if(!el||!a||!c)return;
   const v=num(a.value);
@@ -1094,7 +1339,7 @@ function toCSV(list){
 function categoryForm(c){
   const isNew=!c;c=c||{name:'',currency:S.settings.display,color:CATCOLORS[S.categories.length%CATCOLORS.length]};
   modal(isNew?'Add category':'Edit category',
-  '<form data-form="cat" data-id="'+esc(c.id||'')+'" autocomplete="off"><div class="fld"><label for="f-cname">Name</label><input id="f-cname" name="name" type="text" maxlength="40" required placeholder="e.g. Groceries" value="'+esc(c.name)+'"></div><div class="two"><div class="fld"><label for="f-ccur">Default currency</label><select id="f-ccur" name="currency" data-cur>'+curOptions(c.currency)+'</select></div><div class="fld"><label for="f-cbud">Monthly budget</label><input id="f-cbud" name="budget" data-amt type="number" step="any" min="0" inputmode="decimal" placeholder="Optional" value="'+esc(c.budget||'')+'"></div></div><p class="conv"></p><div class="fld"><span class="lbl">Color</span><div class="swatches">'+CATCOLORS.map((k,i)=>'<label><input type="radio" name="color" value="'+k+'"'+(k===c.color?' checked':'')+' aria-label="Color '+(i+1)+'"><span style="background:'+k+'"></span></label>').join('')+'</div></div><div class="acts"><button class="btn gold" type="submit">Save</button><button class="btn" type="button" data-act="close">Cancel</button></div></form>');
+  '<form data-form="cat" data-id="'+esc(c.id||'')+'" autocomplete="off"><div class="fld"><label for="f-cname">Name</label><input id="f-cname" name="name" type="text" maxlength="40" required placeholder="e.g. Groceries" value="'+esc(c.name)+'"></div><div class="fld"><label for="f-ccur">Default currency</label><select id="f-ccur" name="currency" data-cur>'+curOptions(c.currency)+'</select></div><div class="two"><div class="fld"><label for="f-cbud">Budget</label><input id="f-cbud" name="budget" data-amt type="number" step="any" min="0" inputmode="decimal" placeholder="Optional" value="'+esc(c.budget||'')+'"></div><div class="fld"><label for="f-cper">Per</label><select id="f-cper" name="period">'+Object.keys(BPER).map(k=>'<option value="'+k+'"'+((c.budgetPeriod||'monthly')===k?' selected':'')+'>'+BPER[k].l+' ('+BPER[k].per+')</option>').join('')+'</select></div></div><p class="conv"></p><div class="fld"><span class="lbl">Color</span><div class="swatches">'+CATCOLORS.map((k,i)=>'<label><input type="radio" name="color" value="'+k+'"'+(k===c.color?' checked':'')+' aria-label="Color '+(i+1)+'"><span style="background:'+k+'"></span></label>').join('')+'</div></div><div class="acts"><button class="btn gold" type="submit">Save</button><button class="btn" type="button" data-act="close">Cancel</button></div></form>');
   updateConv();
 }
 function loanForm(l){
@@ -1115,7 +1360,8 @@ function readLoan(f){
   const term=num(fd.get('term')),unit=fd.get('unit');
   return{name:String(fd.get('name')).trim(),lender:String(fd.get('lender')||'').trim(),currency:fd.get('currency'),principal:num(fd.get('principal')),rate:num(fd.get('rate')),frequency:fd.get('frequency'),termMonths:Math.round(unit==='years'?term*12:term),firstDue:fd.get('firstDue')};
 }
-function updateLoanPreview(){
+function updateLoanPreview(){ui.noMask=true;try{updateLoanPreview0()}finally{ui.noMask=false}}
+function updateLoanPreview0(){
   const f=$('form[data-form="loan"]');const el=$('#loan-prev');if(!f||!el)return;
   const l=readLoan(f);
   if(!(l.principal>0)||!(l.rate>=0)||!(l.termMonths>0)||!l.firstDue){el.textContent='Enter the amount, rate and term to preview the payment.';return}
@@ -1123,9 +1369,11 @@ function updateLoanPreview(){
   el.textContent=money(a.pmt,l.currency)+' ('+others(a.pmt,l.currency)+') per '+({monthly:'month',quarterly:'quarter',annual:'year'}[l.frequency])+' · '+a.n+' payments · '+money(a.totalInt,l.currency)+' total interest';
 }
 function cardForm(c){
-  const isNew=!c;c=c||{name:'',issuer:'',currency:S.settings.display,dueDay:25};
+  const isNew=!c;c=c||{name:'',issuer:'',currency:S.settings.display,dueDay:25,limit:'',available:null};
   modal(isNew?'Add credit card':'Edit credit card',
-  '<form data-form="card" data-id="'+esc(c.id||'')+'" autocomplete="off"><div class="fld"><label for="f-kname">Card name</label><input id="f-kname" name="name" type="text" maxlength="40" required placeholder="e.g. Gold Visa" value="'+esc(c.name)+'"></div><div class="fld"><label for="f-kissuer">Bank or issuer</label><input id="f-kissuer" name="issuer" type="text" maxlength="40" placeholder="Optional" value="'+esc(c.issuer||'')+'"></div><div class="two"><div class="fld"><label for="f-kcur">Billing currency</label><select id="f-kcur" name="currency">'+curOptions(c.currency)+'</select></div><div class="fld"><label for="f-kdue">Due day of month</label><input id="f-kdue" name="dueDay" type="number" min="1" max="31" required value="'+esc(c.dueDay)+'"></div></div><div class="acts"><button class="btn gold" type="submit">Save card</button><button class="btn" type="button" data-act="close">Cancel</button></div></form>');
+  '<form data-form="card" data-id="'+esc(c.id||'')+'" autocomplete="off"><div class="fld"><label for="f-kname">Card name</label><input id="f-kname" name="name" type="text" maxlength="40" required placeholder="e.g. Gold Visa" value="'+esc(c.name)+'"></div><div class="fld"><label for="f-kissuer">Bank or issuer</label><input id="f-kissuer" name="issuer" type="text" maxlength="40" placeholder="Optional" value="'+esc(c.issuer||'')+'"></div><div class="two"><div class="fld"><label for="f-kcur">Billing currency</label><select id="f-kcur" name="currency">'+curOptions(c.currency)+'</select></div><div class="fld"><label for="f-kdue">Due day of month</label><input id="f-kdue" name="dueDay" type="number" min="1" max="31" required value="'+esc(c.dueDay)+'"></div></div>'+
+  '<div class="two"><div class="fld"><label for="f-klim">Credit limit</label><input id="f-klim" name="limit" type="number" step="any" min="0" inputmode="decimal" placeholder="Optional" value="'+(c.limit>0?esc(c.limit):'')+'"></div><div class="fld"><label for="f-kav">Available balance</label><input id="f-kav" name="available" type="number" step="any" min="0" inputmode="decimal" placeholder="Optional" value="'+(c.available!=null?esc(c.available):'')+'"></div></div>'+
+  '<p class="hint">Amounts are in the billing currency. Leave available empty to estimate it as the limit minus installments left.</p><div class="acts"><button class="btn gold" type="submit">Save card</button><button class="btn" type="button" data-act="close">Cancel</button></div></form>');
 }
 function purchaseForm(p,cardId){
   if(!S.cards.length){toast('Add a card first');return}
@@ -1147,7 +1395,8 @@ function readPur(f){
   const fd=new FormData(f);
   return{cardId:fd.get('cardId'),desc:String(fd.get('desc')).trim(),amount:num(fd.get('amount')),currency:fd.get('currency'),months:Math.max(1,Math.round(num(fd.get('months')))||1),rate:num(fd.get('rate'))||0,date:fd.get('date'),firstDue:fd.get('firstDue')};
 }
-function updatePurPreview(){
+function updatePurPreview(){ui.noMask=true;try{updatePurPreview0()}finally{ui.noMask=false}}
+function updatePurPreview0(){
   const f=$('form[data-form="pur"]');const el=$('#pur-prev');if(!f||!el)return;
   const p=readPur(f);
   if(!(p.amount>0)||!p.firstDue){el.textContent='Enter an amount to preview the monthly payment.';return}
@@ -1170,6 +1419,7 @@ async function refreshRates(manual){
   for(const tr of tries){
     try{
       const r=await tr();
+      if(!S)return;
       S.rates.table=Object.assign({},S.rates.table,r.table,{USD:1});
       S.rates.asOf=r.asOf||new Date().toISOString().slice(0,10);
       S.rates.source='live';S.rates.fetchedAt=Date.now();
@@ -1178,7 +1428,7 @@ async function refreshRates(manual){
       return;
     }catch(e){}
   }
-  ui.fx='idle';renderTop();
+  ui.fx='idle';if(S)renderTop();
   if(manual)toast('Live feed unreachable from this page. Using saved rates; set manual rates if needed.');
 }
 function updateConverter(){
@@ -1211,27 +1461,43 @@ async function saveFile(name,text,mime){
   showJson(text);return 'shown';
 }
 async function doBackup(){
-  const name='expense-tracker-backup-'+todayStr()+'.json';
+  const name='mitzikois-expenses-backup-'+todayStr()+'.json';
   const res=await saveFile(name,exportJSON());
   if(res==='saved'){S.meta.lastBackup=new Date().toISOString();save();render();toast('Backup saved')}
   else if(res==='declined')toast('Download cancelled');
 }
-const APP_IDS=['expense-tracker','aurum-ledger','mitzikois-expense-tracker'];
-const b64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
-async function decryptBackup(enc,pass){
-  if(!(window.crypto&&crypto.subtle))throw new Error('nocrypto');
-  const km=await crypto.subtle.importKey('raw',new TextEncoder().encode(pass),'PBKDF2',false,['deriveKey']);
-  const key=await crypto.subtle.deriveKey({name:'PBKDF2',salt:b64(enc.salt),iterations:enc.iter||310000,hash:'SHA-256'},km,{name:'AES-GCM',length:256},false,['decrypt']);
-  const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64(enc.iv)},key,b64(enc.ct));
-  return new TextDecoder().decode(pt);
+/* Encrypted backup: same file format as v2.0.1 */
+async function doEncBackup(pass,hint){
+  const salt=crypto.getRandomValues(new Uint8Array(16));
+  const key=await deriveKey(pass,salt,ITER);
+  const blob=await sealWith(key,salt,ITER,JSON.stringify({app:'mitzikois-expense-tracker',version:APP_VERSION,data:S}),hint);
+  const text=JSON.stringify({app:'mitzikois-expense-tracker',version:APP_VERSION,exportedAt:new Date().toISOString(),encrypted:blob},null,2);
+  const res=await saveFile('mitzikois-expenses-encrypted-backup-'+todayStr()+'.json',text);
+  if(res==='saved'){S.meta.lastBackup=new Date().toISOString();save();render();toast('Encrypted backup saved')}
+  else if(res==='declined')toast('Download cancelled');
 }
-function parseBackup(text){
+const APP_IDS=['expense-tracker','aurum-ledger','mitzikois-expense-tracker'];
+/* Accepts: plain backups from any version ({app,data}, {state}, or the bare data),
+   encrypted backups ({encrypted:{…}}), and a raw encrypted record ({enc,salt,iv,ct}). */
+function parseBackup(text,outer){
   let o;
-  try{o=JSON.parse(text)}catch(e){return{error:'That is not valid JSON.'}}
-  if(o&&o.encrypted&&o.encrypted.ct&&o.encrypted.salt&&o.encrypted.iv)return{encrypted:o.encrypted,when:o.exportedAt,version:o.version};
-  const d=o&&(APP_IDS.includes(o.app)||o.exportedAt)&&(o.data||o.state)?(o.data||o.state):o;
-  if(!d||typeof d!=='object'||!Array.isArray(d.categories)||!Array.isArray(d.expenses))return{error:'This does not look like an Expense Tracker backup.'};
-  return{data:normalize(d),when:o.exportedAt};
+  text=String(text||'').replace(/^\uFEFF/,'').trim();
+  if(!text)return{error:'The file is empty.'};
+  try{o=JSON.parse(text)}catch(e){return{error:'That is not valid JSON. Make sure you picked the backup .json file.'}}
+  outer=outer||o;
+  if(typeof o==='string'){try{o=JSON.parse(o)}catch(e){}}
+  let enc=o&&o.encrypted;
+  if(typeof enc==='string'){try{enc=JSON.parse(enc)}catch(e){}}
+  if(isBlob(enc))return{encrypted:enc,when:outer.exportedAt,version:outer.version};
+  if(isBlob(o))return{encrypted:o,when:outer.exportedAt,version:outer.version};
+  let d=o;
+  for(let i=0;i<3&&d&&typeof d==='object'&&!LISTS.some(k=>Array.isArray(d[k]));i++){
+    let n=d.data||d.state||d.payload||d.backup;
+    if(typeof n==='string'){try{n=JSON.parse(n)}catch(e){n=null}}
+    d=n;
+  }
+  if(!d||typeof d!=='object'||!LISTS.some(k=>Array.isArray(d[k])))return{error:'This does not look like an Expense Tracker backup.'};
+  return{data:normalize(JSON.parse(JSON.stringify(d))),when:outer.exportedAt||(o&&o.exportedAt),version:outer.version||(o&&o.version)};
 }
 function showRestorePreview(res){
   const el=$('#restore-prev');if(!el)return;
@@ -1254,21 +1520,23 @@ function resetPend(){
   if(pend.el){pend.el.classList.remove('armed');if(pend.el.isConnected)pend.el.innerHTML=pend.html}
   clearTimeout(pend.t);pend={el:null,html:'',t:null};
 }
+function snap(){ui.undo=JSON.stringify(S)}
 function handle(a,el){
   const id=el.dataset.id;
+  if(/^del-/.test(a))snap();
   switch(a){
     case 'close':closeModal();break;
-    case 'theme':{const o=['auto','light','dark'];S.settings.theme=o[(o.indexOf(S.settings.theme)+1)%3];save();applyTheme();renderTop();break}
+    case 'theme':{const o=['auto','light','dark'];S.settings.theme=o[(o.indexOf(S.settings.theme)+1)%3];save();applyTheme();render();break}
     case 'refresh-fx':refreshRates(true);break;
     case 'pri':S.settings.display=id==='USD'?'USD':'PHP';save();render();break;
     case 'fab':handle({income:'add-inc',savings:'add-acct',loans:'add-loan',cards:'add-pur',categories:'add-cat'}[ui.view]||'add-exp',el);break;
     case 'add-inc':incomeForm();break;
     case 'edit-inc':incomeForm(S.income.find(x=>x.id===id));break;
-    case 'del-inc':S.income=S.income.filter(x=>x.id!==id);save();render();toast('Income deleted');break;
+    case 'del-inc':S.income=S.income.filter(x=>x.id!==id);save();render();toast('Income deleted',true);break;
     case 'add-acct':accountForm();break;
     case 'edit-acct':accountForm(S.accounts.find(x=>x.id===id));break;
     case 'upd-acct':{const a=S.accounts.find(x=>x.id===id);if(a)balanceForm(a);break}
-    case 'del-acct':S.accounts=S.accounts.filter(x=>x.id!==id);save();render();toast('Account deleted');break;
+    case 'del-acct':S.accounts=S.accounts.filter(x=>x.id!==id);save();render();toast('Account deleted',true);break;
     case 'dup-exp':{const e=S.expenses.find(x=>x.id===id);if(e){S.expenses.push(Object.assign({},e,{id:uid(),date:todayStr()}));ui.expMonth=todayStr().slice(0,7);save();render();toast('Copied to today')}break}
     case 'export-csv':case 'export-csv-all':{
       const list=a==='export-csv'?expFiltered():S.expenses;
@@ -1278,16 +1546,16 @@ function handle(a,el){
     }
     case 'add-exp':expenseForm();break;
     case 'edit-exp':expenseForm(S.expenses.find(x=>x.id===id));break;
-    case 'del-exp':S.expenses=S.expenses.filter(x=>x.id!==id);save();render();toast('Expense deleted');break;
+    case 'del-exp':S.expenses=S.expenses.filter(x=>x.id!==id);save();render();toast('Expense deleted',true);break;
     case 'add-cat':categoryForm();break;
     case 'edit-cat':categoryForm(S.categories.find(x=>x.id===id));break;
-    case 'del-cat':{const n=S.expenses.filter(x=>x.catId===id).length;S.categories=S.categories.filter(x=>x.id!==id);S.expenses=S.expenses.filter(x=>x.catId!==id);if(ui.expCat===id)ui.expCat='all';save();render();toast('Category deleted'+(n?' with '+n+' entr'+(n>1?'ies':'y'):''));break}
+    case 'del-cat':{const n=S.expenses.filter(x=>x.catId===id).length;S.categories=S.categories.filter(x=>x.id!==id);S.expenses=S.expenses.filter(x=>x.catId!==id);if(ui.expCat===id)ui.expCat='all';save();render();toast('Category deleted'+(n?' with '+n+' entr'+(n>1?'ies':'y'):''),true);break}
     case 'add-loan':loanForm();break;
     case 'edit-loan':loanForm(S.loans.find(x=>x.id===id));break;
-    case 'del-loan':S.loans=S.loans.filter(x=>x.id!==id);save();render();toast('Loan deleted');break;
+    case 'del-loan':S.loans=S.loans.filter(x=>x.id!==id);save();render();toast('Loan deleted',true);break;
     case 'add-card':cardForm();break;
     case 'edit-card':cardForm(S.cards.find(x=>x.id===id));break;
-    case 'del-card':S.cards=S.cards.filter(x=>x.id!==id);S.purchases=S.purchases.filter(x=>x.cardId!==id);if(ui.cardSel===id)ui.cardSel='all';save();render();toast('Card deleted');break;
+    case 'del-card':S.cards=S.cards.filter(x=>x.id!==id);S.purchases=S.purchases.filter(x=>x.cardId!==id);if(ui.cardSel===id)ui.cardSel='all';save();render();toast('Card deleted',true);break;
     case 'add-pur':purchaseForm(null,ui.cardSel!=='all'?ui.cardSel:null);break;
     case 'add-pur-card':purchaseForm(null,id);break;
     case 'csel':ui.cardSel=id||'all';render();break;
@@ -1297,7 +1565,7 @@ function handle(a,el){
     case 'rename':titleForm();break;
     case 'title-reset':S.settings.title=DEFAULT_TITLE;save();closeModal();render();toast('Name reset');break;
     case 'edit-pur':purchaseForm(S.purchases.find(x=>x.id===id));break;
-    case 'del-pur':S.purchases=S.purchases.filter(x=>x.id!==id);save();render();toast('Purchase deleted');break;
+    case 'del-pur':S.purchases=S.purchases.filter(x=>x.id!==id);save();render();toast('Purchase deleted',true);break;
     case 'toggle-sched':{const k=el.dataset.key;if(ui.open.has(k))ui.open.delete(k);else ui.open.add(k);render();break}
     case 'pay-next':{
       const it=el.dataset.kind==='loan'?S.loans.find(x=>x.id===id):S.purchases.find(x=>x.id===id);
@@ -1306,7 +1574,7 @@ function handle(a,el){
       if(c.next){it.paid=toggleSet(it.paid,c.next.i);save();render();toast('Payment '+c.next.i+' marked paid')}
       break;
     }
-    case 'del-cur':S.settings.currencies=S.settings.currencies.filter(c=>c!==id);delete S.rates.manual[id];if(S.settings.display===id)S.settings.display='PHP';save();render();toast(id+' removed');break;
+    case 'del-cur':S.settings.currencies=S.settings.currencies.filter(c=>c!==id);delete S.rates.manual[id];if(S.settings.display===id)S.settings.display='PHP';save();render();toast(id+' removed',true);break;
     case 'backup':doBackup();break;
     case 'copy-json':{
       const txt=exportJSON();
@@ -1321,16 +1589,32 @@ function handle(a,el){
       if(!pw){if(msg)msg.textContent='Enter the password.';break}
       if(msg)msg.textContent='Unlocking…';
       decryptBackup(pe.encrypted,pw).then(txt=>{
-        const r=parseBackup(txt);
+        const r=parseBackup(txt,{exportedAt:pe.when,version:pe.version});
         if(r.error||r.encrypted){showRestorePreview({error:'Unlocked, but the contents are not a tracker backup.'});return}
         ui.pendingEnc=null;if(!r.when)r.when=pe.when;showRestorePreview(r);
       }).catch(e=>{const m=$('#restore-msg');if(m)m.textContent=e&&e.message==='nocrypto'?'This browser cannot decrypt here. Open the tracker over https or as a local file.':'Wrong password, or the file is damaged.'});
       break;
     }
     case 'restore-apply':
-      if(ui.pendingRestore){S=normalize(ui.pendingRestore);S.meta.sample=false;ui.pendingRestore=null;save();applyTheme();render();toast('Backup restored')}
+      if(ui.pendingRestore){
+        snap();
+        const keep={autoLock:S.settings.autoLock,lockHint:S.settings.lockHint};
+        S=normalize(ui.pendingRestore);S.meta.sample=false;ui.pendingRestore=null;
+        if(LK.key)Object.assign(S.settings,keep);
+        save();applyTheme();render();toast('Backup restored',true);
+      }
       break;
-    case 'fresh':S.expenses=[];S.income=[];S.accounts=[];S.loans=[];S.cards=[];S.purchases=[];S.meta.sample=false;ui.open.clear();save();render();toast('Entries cleared');break;
+    case 'fresh':snap();S.expenses=[];S.income=[];S.accounts=[];S.loans=[];S.cards=[];S.purchases=[];S.meta.sample=false;ui.open.clear();save();render();toast('Entries cleared',true);break;
+    case 'undo':if(ui.undo){S=normalize(JSON.parse(ui.undo));ui.undo=null;save();applyTheme();render();toast('Undone')}break;
+    case 'hide':S.settings.hide=!S.settings.hide;save();render();break;
+    case 'lock-now':lockNow();break;
+    case 'pw-set':if(!hasCrypto()){toast('This browser cannot encrypt here.');break}pwForm('set');break;
+    case 'pw-change':pwForm('change');break;
+    case 'pw-remove':pwForm('remove');break;
+    case 'backup-enc':if(!hasCrypto()){toast('This browser cannot encrypt here. Use a plain backup.');break}pwForm('enc');break;
+    case 'set-mode':S.settings.theme=id;save();applyTheme();render();break;
+    case 'set-font':S.settings.font=id;save();applyTheme();render();break;
+    case 'upd-avail':{const c=S.cards.find(x=>x.id===id);if(c)availForm(c);break}
   }
 }
 document.addEventListener('click',function(ev){
@@ -1364,7 +1648,7 @@ document.addEventListener('submit',function(ev){
   }else if(kind==='cat'){
     const name=String(fd.get('name')).trim();
     if(!name)return;
-    const rec={name,currency:fd.get('currency'),color:fd.get('color')||CATCOLORS[0],budget:Math.max(0,num(fd.get('budget'))||0)};
+    const rec={name,currency:fd.get('currency'),color:fd.get('color')||CATCOLORS[0],budget:Math.max(0,num(fd.get('budget'))||0),budgetPeriod:BPER[fd.get('period')]?fd.get('period'):'monthly'};
     if(id)Object.assign(S.categories.find(x=>x.id===id),rec);else S.categories.push(Object.assign({id:uid()},rec));
     save();render();closeModal();toast('Category saved');
   }else if(kind==='loan'){
@@ -1374,10 +1658,19 @@ document.addEventListener('submit',function(ev){
     else S.loans.push(Object.assign({id:uid(),paid:[]},l));
     save();render();closeModal();toast('Loan saved');
   }else if(kind==='card'){
-    const rec={name:String(fd.get('name')).trim(),issuer:String(fd.get('issuer')||'').trim(),currency:fd.get('currency'),dueDay:Math.min(31,Math.max(1,Math.round(num(fd.get('dueDay')))||1))};
+    const av=num(fd.get('available'));
+    const rec={name:String(fd.get('name')).trim(),issuer:String(fd.get('issuer')||'').trim(),currency:fd.get('currency'),dueDay:Math.min(31,Math.max(1,Math.round(num(fd.get('dueDay')))||1)),limit:Math.max(0,num(fd.get('limit'))||0),available:av>=0?av:null};
     if(!rec.name)return;
+    const old=id&&S.cards.find(x=>x.id===id);
+    if(rec.available!=null&&(!old||old.available!==rec.available))rec.availDate=todayStr();
+    if(rec.limit&&rec.available!=null&&rec.available>rec.limit){toast('Available balance is higher than the limit');return}
     if(id)Object.assign(S.cards.find(x=>x.id===id),rec);else S.cards.push(Object.assign({id:uid()},rec));
     save();render();closeModal();toast('Card saved');
+  }else if(kind==='avail'){
+    const c=S.cards.find(x=>x.id===id),v=num(fd.get('available'));
+    if(!c)return;
+    c.available=v>=0?v:null;c.availDate=todayStr();
+    save();render();closeModal();toast(c.available==null?'Using the estimate':'Available balance updated');
   }else if(kind==='pur'){
     const p=readPur(f);
     if(!p.desc||!(p.amount>0)){toast('Check the purchase details');return}
@@ -1470,13 +1763,142 @@ document.addEventListener('keydown',function(ev){if(ev.key==='Escape'&&!$('#moda
 window.addEventListener('hashchange',function(){route();render();window.scrollTo(0,0)});
 
 /* ---------- boot ---------- */
+/* ---------- login / lock ---------- */
+let started=false,idleT=null,lockBlob=null;
+function pwField(id,label,ac){
+  return '<div class="fld"><label for="'+id+'">'+label+'</label><div class="pw"><input id="'+id+'" name="'+id+'" type="password" autocomplete="'+(ac||'current-password')+'" required><button class="icon" type="button" data-lock="peek" data-for="'+id+'" aria-label="Show password">'+ic('eye')+'</button></div></div>';
+}
+function showLogin(blob){
+  lockBlob=blob;
+  const meta=readMeta(),title=meta.title||DEFAULT_TITLE,hint=(blob&&blob.hint)||meta.hint||'';
+  applyTheme(meta);
+  document.title=title+' · Locked';
+  closeModal();
+  const el=$('#lock');
+  el.innerHTML='<form class="lockcard" data-lockform="login" autocomplete="on"><div class="lmark">'+markSvg()+'</div><h1>'+esc(title)+'</h1><p class="muted" style="font-size:13px">Enter your password to open your tracker.</p>'+
+    '<input type="text" name="username" autocomplete="username" value="'+esc(title)+'" hidden>'+
+    pwField('lk-pass','Password')+(hint?'<p class="hint" style="text-align:left;margin-top:-4px">Hint: '+esc(hint)+'</p>':'')+
+    '<p class="lmsg" id="lk-msg" role="alert"></p><button class="btn gold" type="submit">'+ic('lock')+'Unlock</button>'+
+    '<details><summary>Forgot your password?</summary><p>Your data is encrypted with this password, so it cannot be recovered without it. You can erase the data on this device and start over, then restore a backup from <b>Settings &amp; backup</b>.</p><button class="btn armable" type="button" data-lock="erase">Erase data on this device</button></details>'+
+    '<p class="ver">'+esc(verLabel())+'</p></form>';
+  el.hidden=false;document.body.classList.add('noscroll');
+  setTimeout(()=>{const i=$('#lk-pass');if(i)i.focus()},50);
+}
+function hideLogin(){const el=$('#lock');el.hidden=true;el.innerHTML='';document.body.classList.remove('noscroll')}
+async function unlock(pass){
+  const blob=lockBlob;
+  const key=await deriveKey(pass,b64(blob.salt),blob.iter||ITER);
+  const txt=await openWith(key,blob);              /* throws on a wrong password */
+  let data=JSON.parse(txt);
+  if(data&&data.data&&!Array.isArray(data.categories))data=data.data;
+  S=normalize(data);
+  LK.key=key;LK.salt=b64(blob.salt);LK.iter=blob.iter||ITER;LK.last=blob;
+  lockBlob=null;hideLogin();
+  if(!started)start();else{applyTheme();render()}
+  resetIdle();
+}
+async function lockNow(){
+  if(!LK.key||!S)return;
+  closeModal();
+  await save();
+  const blob=LK.last||await sealWith(LK.key,LK.salt,LK.iter,JSON.stringify(S),S.settings.lockHint);
+  S=null;LK.key=null;LK.last=null;clearTimeout(idleT);
+  $('#view').innerHTML='';$('#banner').innerHTML='';
+  showLogin(blob);
+}
+function resetIdle(){
+  clearTimeout(idleT);
+  if(!LK.key||!S||!(S.settings.autoLock>0))return;
+  idleT=setTimeout(lockNow,S.settings.autoLock*60000);
+}
+['pointerdown','keydown','scroll','touchstart'].forEach(ev=>document.addEventListener(ev,()=>{if(LK.key&&S)resetIdle()},{passive:true,capture:true}));
+let pwBusy=false;
+document.addEventListener('submit',async function(ev){
+  const f=ev.target.closest('form[data-lockform]');if(!f)return;
+  ev.preventDefault();ev.stopImmediatePropagation();
+  if(pwBusy)return;
+  const msg=$('#lk-msg'),pass=($('#lk-pass')||{}).value||'';
+  if(!pass){msg.textContent='Enter your password.';return}
+  pwBusy=true;msg.style.color='var(--muted)';msg.textContent='Unlocking…';
+  try{await unlock(pass)}
+  catch(e){msg.style.color='';msg.textContent=e&&e.message==='nocrypto'?'This browser cannot decrypt here. Open the tracker over https or as a local file.':'Wrong password. Try again.';const i=$('#lk-pass');if(i){i.select()}}
+  finally{pwBusy=false}
+},true);
+document.addEventListener('click',function(ev){
+  const el=ev.target.closest('[data-lock]');if(!el)return;
+  const a=el.dataset.lock;
+  if(a==='peek'){const i=$('#'+el.dataset.for);if(i){const show=i.type==='password';i.type=show?'text':'password';el.innerHTML=ic(show?'eyeoff':'eye');el.setAttribute('aria-label',show?'Hide password':'Show password')}}
+  if(a==='erase'){
+    if(!el.classList.contains('armed')){el.classList.add('armed');el.textContent='Tap again to erase everything';setTimeout(()=>{if(el.isConnected){el.classList.remove('armed');el.textContent='Erase data on this device'}},4000);return}
+    try{localStorage.removeItem(KEY)}catch(e){}
+    const meta=readMeta();
+    S=defaults();S.settings.title=meta.title||DEFAULT_TITLE;S.settings.theme=meta.theme||'auto';S.settings.palette=PALETTES[meta.palette]?meta.palette:'gold';
+    LK.key=null;LK.last=null;lockBlob=null;save();hideLogin();
+    if(!started)start();else{applyTheme();render()}
+    go('data');toast('Data erased. Restore a backup or start fresh.');
+  }
+});
+
+/* Password form: set / change / remove the login password, or make an encrypted backup */
+document.addEventListener('submit',async function(ev){
+  const f=ev.target.closest('form[data-form="pw"]');if(!f)return;
+  ev.preventDefault();ev.stopImmediatePropagation();
+  if(pwBusy)return;
+  const kind=f.dataset.kind,msg=$('#pw-msg'),v=id=>(($('#'+id)||{}).value||'');
+  const cur=v('pw-cur'),nw=v('pw-new'),nw2=v('pw-new2'),hint=v('pw-hint').trim();
+  const fail=t=>{msg.style.color='var(--bad)';msg.textContent=t};
+  if(kind!=='remove'){
+    if(nw.length<4)return fail('Use at least 4 characters.');
+    if(nw!==nw2)return fail('The two passwords do not match.');
+    if(hint&&hint.toLowerCase().includes(nw.toLowerCase()))return fail('The hint should not contain the password.');
+  }
+  pwBusy=true;msg.style.color='var(--muted)';msg.textContent='Working…';
+  try{
+    if(kind==='change'||kind==='remove'){
+      await saveQ;
+      const k=await deriveKey(cur,LK.salt,LK.iter);
+      try{await openWith(k,LK.last||await sealWith(LK.key,LK.salt,LK.iter,'x'))}catch(e){pwBusy=false;return fail('Current password is wrong.')}
+    }
+    if(kind==='enc'){await doEncBackup(nw,hint);closeModal();return}
+    if(kind==='remove'){LK.key=null;LK.salt=null;LK.last=null;clearTimeout(idleT);S.settings.lockHint='';save();closeModal();render();toast('Password turned off');return}
+    const salt=crypto.getRandomValues(new Uint8Array(16));
+    LK.key=await deriveKey(nw,salt,ITER);LK.salt=salt;LK.iter=ITER;
+    S.settings.lockHint=hint;
+    await save();closeModal();render();resetIdle();
+    toast(kind==='set'?'Password set. You will need it to open the tracker.':'Password changed');
+  }catch(e){fail(e&&e.message==='nocrypto'?'This browser cannot encrypt here.':'Something went wrong. Try again.')}
+  finally{pwBusy=false}
+},true);
+document.addEventListener('change',function(ev){
+  const t=ev.target;if(!S)return;
+  if(t.name==='palette'&&t.closest('.palettes')){S.settings.palette=t.value;save();applyTheme();render();return}
+  if(t.id==='f-autolock'){S.settings.autoLock=parseInt(t.value,10)||0;save();resetIdle();toast(S.settings.autoLock?'Locks after '+t.options[t.selectedIndex].text+' idle':'Auto-lock off')}
+});
+document.addEventListener('keydown',function(ev){
+  if(!S||ev.ctrlKey||ev.metaKey||ev.altKey||!$('#lock').hidden||!$('#modal').hidden)return;
+  const tg=ev.target,tn=tg&&tg.tagName;
+  if(tn==='INPUT'||tn==='TEXTAREA'||tn==='SELECT'||(tg&&tg.isContentEditable))return;
+  const k=ev.key.toLowerCase();
+  if(k==='n'){ev.preventDefault();handle('add-exp',document.body)}
+  else if(k==='i'){ev.preventDefault();handle('add-inc',document.body)}
+  else if(k==='h'){ev.preventDefault();handle('hide',document.body)}
+  else if(k==='l'&&LK.key){ev.preventDefault();lockNow()}
+  else if(k==='/'){const q=$('#f-q')||$('#f-cq');if(q){ev.preventDefault();q.focus()}}
+});
+
+/* ---------- boot ---------- */
+function start(){
+  started=true;
+  applyTheme();route();render();
+  refreshRates(false);
+  setInterval(()=>{if(S)refreshRates(false)},30*60*1000);
+}
 (function init(){
   const raw=lsGet(KEY);let parsed=null;
   try{parsed=raw?JSON.parse(raw):null}catch(e){}
+  if(isBlob(parsed)){showLogin(parsed);return}
   S=parsed?normalize(parsed):initial();
-  applyTheme();route();render();
-  refreshRates(false);
-  setInterval(()=>refreshRates(false),30*60*1000);
+  start();
 })();
 })();
 </script>
